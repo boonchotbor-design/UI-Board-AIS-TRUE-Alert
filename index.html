@@ -1041,6 +1041,12 @@
             📌 <strong>ถ้าไม่ระบุ Group ID</strong> ระบบจะ Broadcast ไปทุกคนที่ Follow Bot แทน<br>
             ⚡ <strong>วิธีที่เร็วที่สุด:</strong> กดปุ่ม <strong>"คัดลอกรูปภาพ"</strong> และ <strong>"คัดลอกข้อความ"</strong> ด้านล่าง แล้วกด Ctrl+V ใน LINE Group ได้ทันที!
           </small>
+        <div class="form-group">
+          <label for="gasWebAppUrl">🔗 Google Apps Script Web App URL (สำหรับส่งตรงอัตโนมัติ 100%):</label>
+          <input type="text" id="gasWebAppUrl" class="form-control" placeholder="https://script.google.com/macros/s/.../exec">
+          <small style="color: #64748b; font-size: 0.75rem; margin-top: 4px; display: block;">
+            💡 <strong>วิธีส่งอัตโนมัติ:</strong> เนื่องจาก Browser บล็อกการยิงตรงเข้า LINE (CORS) ให้นำ Web App URL จาก Google Apps Script (Deploy &gt; Web app) มาวางที่นี่ ระบบจะส่งผ่าน Server ให้ทันทีโดยไม่ติด CORS
+          </small>
         </div>
 
         <!-- Captured Dashboard Image Preview -->

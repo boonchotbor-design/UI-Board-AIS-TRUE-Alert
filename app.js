@@ -1149,6 +1149,12 @@ function generateLineAlertPreview() {
     const savedGroup = localStorage.getItem('sla_line_group_id') || state.lineGroupId;
     if (savedGroup) groupInput.value = savedGroup;
   }
+
+  const gasInput = document.getElementById('gasWebAppUrl');
+  if (gasInput) {
+    const savedGasUrl = localStorage.getItem('sla_gas_url') || '';
+    if (savedGasUrl) gasInput.value = savedGasUrl;
+  }
 }
 
 // Capture High-Res Dashboard Screenshot using html2canvas
@@ -1245,6 +1251,10 @@ async function handleSendLineAlert() {
   state.lineToken = token;
   if (groupId) localStorage.setItem('sla_line_group_id', groupId);
 
+  const gasInput = document.getElementById('gasWebAppUrl');
+  const gasUrl = gasInput ? gasInput.value.trim() : (localStorage.getItem('sla_gas_url') || '');
+  if (gasUrl) localStorage.setItem('sla_gas_url', gasUrl);
+
   showToast('กำลังส่งแจ้งเตือน (รูปภาพ + ข้อความ) เข้า LINE Group...', 'info');
 
   // Check if running in Google Apps Script context
@@ -1259,6 +1269,34 @@ async function handleSendLineAlert() {
       })
       .sendLineAlert(token, message, imageBase64, groupId);
     return;
+  }
+
+  // ── Google Apps Script Web App Proxy mode (สำหรับ Browser แก้ปัญหา CORS 100%) ──
+  if (gasUrl && (gasUrl.startsWith('http://') || gasUrl.startsWith('https://'))) {
+    try {
+      await fetch(gasUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'sendLineAlert',
+          token: token,
+          message: message,
+          imageBase64: imageBase64,
+          groupId: groupId
+        }),
+        mode: 'no-cors'
+      });
+      showToast('🚀 ส่งข้อมูลแจ้งเตือนเข้า LINE Group สำเร็จแล้ว (ผ่าน Google Apps Script)!', 'success');
+      if (state.lastCapturedBlob) {
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': state.lastCapturedBlob })]);
+        } catch(e) {}
+      }
+      document.getElementById('lineModal').classList.remove('active');
+      return;
+    } catch(gasErr) {
+      console.warn('GAS Proxy call error:', gasErr);
+    }
   }
 
   // ── Webhook URL mode (เช่น webhook.site สำหรับ test) ──
