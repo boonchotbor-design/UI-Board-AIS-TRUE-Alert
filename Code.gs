@@ -38,6 +38,10 @@ function doGet(e) {
 //   - รองรับ saveImportData และ sendLineAlert จาก Web App frontend
 // ─────────────────────────────────────────────────────────────
 function doPost(e) {
+  if (!e || !e.postData || !e.postData.contents) {
+    Logger.log('ℹ️ doPost: ไม่พบ postData (กรณีนี้เกิดจากการกดปุ่ม Run ใน Apps Script Editor โดยตรง ซึ่งเป็นปกติครับ เนื่องจาก Webhook จริงจะส่ง postData มาจาก LINE โดยอัตโนมัติ)');
+    return ContentService.createTextOutput('No postData').setMimeType(ContentService.MimeType.TEXT);
+  }
   try {
     var body = JSON.parse(e.postData.contents);
 
