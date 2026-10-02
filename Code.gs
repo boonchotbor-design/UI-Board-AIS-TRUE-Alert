@@ -622,7 +622,7 @@ function sendLineAlert(token, message, imageBase64) {
   } catch(e) {}
 
   if (token.indexOf('http://') === 0 || token.indexOf('https://') === 0) {
-    // กรณีเป็น Webhook URL
+    // 1. กรณีเป็น Webhook URL
     var payload = {
       message: message,
       imageBase64: imageBase64 || null
@@ -635,14 +635,39 @@ function sendLineAlert(token, message, imageBase64) {
     };
     var res = UrlFetchApp.fetch(token, options);
     return { success: true, response: res.getContentText() };
+  } else if (token.length > 80) {
+    // 2. กรณีเป็น LINE Messaging API Channel Access Token (เช่น บอท SPE_SLA)
+    var url = 'https://api.line.me/v2/bot/message/broadcast';
+    var payload = {
+      messages: [
+        {
+          type: 'text',
+          text: message
+        }
+      ]
+    };
+    var options = {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'Authorization': 'Bearer ' + token
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    var res = UrlFetchApp.fetch(url, options);
+    var resCode = res.getResponseCode();
+    if (resCode !== 200) {
+      throw new Error('LINE Messaging API Error (' + resCode + '): ' + res.getContentText());
+    }
+    return { success: true, response: res.getContentText() };
   } else {
-    // กรณีเป็น LINE Notify Token
+    // 3. กรณีเป็น LINE Notify Token (ปกติความยาว 43 ตัวอักษร)
     var url = 'https://notify-api.line.me/api/notify';
     var payload = {
       'message': '\n' + message
     };
 
-    // หากมีแนบรูปภาพ Base64 แปลงเป็น Blob แนบไปใน payload
     if (imageBase64) {
       try {
         var cleanBase64 = imageBase64.indexOf(',') > -1 ? imageBase64.split(',')[1] : imageBase64;
