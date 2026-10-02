@@ -293,31 +293,26 @@ function fetchSheetViaJsonp(sheetName) {
 }
 
 // Fetch live data from Google Sheet
-// PRIMARY: ดึงจากชีต AIS และ True โดยตรง (มีข้อมูลอยู่แล้ว)
-// FALLBACK: ดึงจาก 56A0S0Q / 56A0UPS
 async function loadDataFromGoogleSheet() {
   try {
-    const loadSheet = (primary, fallback) =>
-      fetchSheetViaJsonp(primary).catch(() => fetchSheetViaJsonp(fallback));
-
     const [dataAis, dataTrue] = await Promise.all([
-      loadSheet('AIS', '56A0S0Q'),
-      loadSheet('True', '56A0UPS')
+      fetchSheetViaJsonp('56A0S0Q').catch(() => fetchSheetViaJsonp('AIS')),
+      fetchSheetViaJsonp('56A0UPS').catch(() => fetchSheetViaJsonp('TRUE'))
     ]);
 
-    state.rawGoogleSheetData.AIS = dataAis || [];
-    state.rawGoogleSheetData.TRUE = dataTrue || [];
+    state.rawGoogleSheetData.AIS = dataAis;
+    state.rawGoogleSheetData.TRUE = dataTrue;
     state.lastUpdated = new Date();
-
-    const el = document.getElementById('updateTimestamp');
-    if (el) el.textContent = `ข้อมูลอัปเดต ณ: ${formatDateTime(state.lastUpdated)} (Google Sheets)`;
+    
+    document.getElementById('updateTimestamp').textContent = 
+      `ข้อมูลอัปเดต ณ: ${formatDateTime(state.lastUpdated)} (Google Sheets)`;
 
     extractAvailableYears();
     calculateAndRenderDashboard();
-    showToast('โหลดข้อมูลสดจาก Google Sheets สำเร็จ!', 'success');
+    showToast('โหลดข้อมูลสดจาก Google Sheets สำเร็จเรียบร้อยแล้ว!', 'success');
   } catch (err) {
     console.error('Error fetching Google Sheets data:', err);
-    showToast('ไม่สามารถดึงข้อมูลจาก Google Sheets ได้', 'error');
+    showToast('ไม่สามารถดึงข้อมูลจาก Google Sheets ได้ (กำลังใช้ข้อมูลตัวอย่าง)', 'error');
   }
 }
 
@@ -383,94 +378,50 @@ function parseDate(v) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// ─── หา column index จาก header row ───
-function detectSheetColumns(rows, op) {
-  // scan 5 rows แรกหา header
-  const SCAN = Math.min(5, rows.length);
-  const normMap = {}; // normalized key -> col index
-  let headerRow = 0;
-  for (let r = 0; r < SCAN; r++) {
-    for (let c = 0; c < (rows[r] || []).length; c++) {
-      const raw = String(rows[r][c] || '').trim();
-      if (!raw) continue;
-      const key = raw.toLowerCase().replace(/[\s._\-\/]/g, '');
-      if (normMap[key] === undefined) normMap[key] = c;
-      // ถ้าเจอ 'du id' หรือ 'duid' ถือว่านี่คือ header row
-      if (key === 'duid' || raw.toLowerCase() === 'du id') headerRow = r;
-    }
-  }
-
-  function pick(candidates, fallback) {
-    for (const k of candidates) {
-      const norm = k.toLowerCase().replace(/[\s._\-\/]/g, '');
-      if (normMap[norm] !== undefined) return normMap[norm];
-    }
-    return fallback;
-  }
-
-  const totalCols = (rows[0] || []).length;
-  const is56Format = totalCols > 55; // 56A0S0Q(~80col) vs AIS(~40col)
-
-  if (op === 'AIS') {
-    if (is56Format) {
-      // ชีต 56A0S0Q
-      return { startRow: headerRow + 2, idxDuid: 0, idxInstall: 8, idxSmartQc: 20, idxPat: 30, idxOwnerDoc: 31, idxPatRemark: 38 };
-    } else {
-      // ชีต AIS (format เดิม) - scan header
-      return {
-        startRow: headerRow + 1,
-        idxDuid:      pick(['duid','du id'], 0),
-        idxInstall:   pick(['actualstartdate','actualstart','installdate','planstartdate'], 7),
-        idxSmartQc:   pick(['closetime','closedate','smartqc','smartqcdate'], 11),
-        idxPat:       pick(['deliveryattachmentrequired','deliveryattachment','patdate','pat'], 13),
-        idxOwnerDoc:  pick(['owner','ownerengineering','approvestate'], 10),
-        idxPatRemark: pick(['patremark','remark','remarks','activitystate','activitystatus'], 12)
-      };
-    }
-  } else {
-    if (is56Format) {
-      // ชีต 56A0UPS
-      return { startRow: headerRow + 2, idxDuid: 0, idxInstall: 66, idxSmartQc: 36, idxAor: 40, idxPatRemark: 44, idxPat: 46, idxOwnerDoc: 47 };
-    } else {
-      // ชีต True (format เดิม) - scan header
-      return {
-        startRow: headerRow + 1,
-        idxDuid:      pick(['duid','du id'], 1),
-        idxInstall:   pick(['verifyphoto','veriphoto','actualstartdate','actualstart','installdate'], 7),
-        idxSmartQc:   pick(['081smartqc','smartqc','closetime','closedate'], 11),
-        idxAor:       pick(['aor','aordate'], 10),
-        idxPat:       pick(['141a129patsitef','patsitefolderactualend','patdate','pat'], 13),
-        idxOwnerDoc:  pick(['patowner','owner','ownerengineering'], 12),
-        idxPatRemark: pick(['integrationalarmc','alarmcategory','patremark','remark'], 9)
-      };
-    }
-  }
-}
-
 // Extract available years from dataset
 function extractAvailableYears() {
   const years = new Set();
-  const dataset = state.dataSource === 'SHEET'
-    ? state.rawGoogleSheetData[state.operator]
-    : state.importedData[state.operator];
+  const dataset = state.dataSource === 'SHEET' ? state.rawGoogleSheetData[state.operator] : state.importedData[state.operator];
 
-  if (state.dataSource === 'SHEET' && dataset && dataset.length > 1) {
-    const cols = detectSheetColumns(dataset, state.operator);
-    const installCol = cols.idxInstall;
-    for (let i = cols.startRow; i < dataset.length; i++) {
-      const d = parseDate((dataset[i] || [])[installCol]);
-      if (d) years.add(d.getFullYear().toString());
+  if (state.operator === 'AIS') {
+    if (state.dataSource === 'SHEET' && dataset && dataset.length > 2) {
+      const is56A0S0Q = dataset[0] && dataset[0].length > 40 && String(dataset[0][0]).includes('DU ID');
+      const installCol = is56A0S0Q ? 8 : 30;
+      for (let i = 2; i < dataset.length; i++) {
+        const d = parseDate(dataset[i][installCol]);
+        if (d) years.add(d.getFullYear().toString());
+      }
+    } else if (dataset) {
+      dataset.forEach(item => {
+        if (item.installDate) {
+          const d = parseDate(item.installDate);
+          if (d) years.add(d.getFullYear().toString());
+        }
+      });
     }
-  } else if (dataset && Array.isArray(dataset)) {
-    dataset.forEach(item => {
-      const d = parseDate(item.installDate);
-      if (d) years.add(d.getFullYear().toString());
-    });
+  } else {
+    // TRUE
+    if (state.dataSource === 'SHEET' && dataset && dataset.length > 2) {
+      const is56A0UPS = dataset[0] && dataset[0].length > 60;
+      const installCol = is56A0UPS ? 66 : 22;
+      for (let i = 2; i < dataset.length; i++) {
+        const d = parseDate(dataset[i][installCol]);
+        if (d) years.add(d.getFullYear().toString());
+      }
+    } else if (dataset) {
+      dataset.forEach(item => {
+        if (item.installDate) {
+          const d = parseDate(item.installDate);
+          if (d) years.add(d.getFullYear().toString());
+        }
+      });
+    }
   }
 
-  const sortedYears = Array.from(years).sort((a, b) => b - a);
+  const sortedYears = Array.from(years).sort((a,b) => b - a);
   state.availableYears = ['ทั้งหมด', ...sortedYears];
 
+  // Update dropdown options
   const select = document.getElementById('yearSelect');
   if (select) {
     select.innerHTML = '';
@@ -512,20 +463,26 @@ function calculateMetrics() {
   if (op === 'AIS') {
     if (isSheet) {
       const rows = state.rawGoogleSheetData.AIS;
-      if (!rows || rows.length <= 1) return acc;
+      if (!rows || rows.length <= 2) return acc;
 
-      const cols = detectSheetColumns(rows, 'AIS');
-      const { startRow, idxDuid, idxInstall, idxSmartQc, idxPat, idxOwnerDoc, idxPatRemark } = cols;
+      const is56A0S0Q = rows[0] && rows[0].length > 40 && String(rows[0][0]).includes('DU ID');
+      const idxInstall = is56A0S0Q ? 8 : 30;
+      const idxSmartQc = is56A0S0Q ? 20 : 31;
+      const idxPat = is56A0S0Q ? 30 : 33;
+      const idxOwnerDoc = is56A0S0Q ? 31 : 37;
+      const idxPatRemark = is56A0S0Q ? 38 : 35;
+      const startRow = is56A0S0Q ? 2 : 2;
 
       for (let i = startRow; i < rows.length; i++) {
-        const row = rows[i] || [];
+        const row = rows[i];
+        if (row.length <= Math.min(idxInstall, idxSmartQc)) continue;
         const installDate = parseDate(row[idxInstall]);
         if (!installDate) continue;
         if (selectedYear !== 'ทั้งหมด' && installDate.getFullYear().toString() !== selectedYear) continue;
 
         acc.totalInstall++;
-        const duid = (row[idxDuid] || '').trim() || 'ไม่ระบุ DUID';
-        const ownerDoc = (row[idxOwnerDoc] || '').trim() || '-';
+        const duid = row[0] ? row[0].trim() : 'ไม่ระบุ DUID';
+        const ownerDoc = row[idxOwnerDoc] ? row[idxOwnerDoc].trim() : '-';
         const smartQcDate = parseDate(row[idxSmartQc]);
         const patDate = parseDate(row[idxPat]);
         const patRemark = (row[idxPatRemark] || '').trim();
@@ -534,16 +491,23 @@ function calculateMetrics() {
         if (!smartQcDate) {
           const diff = Math.max(0, Math.floor((today - installDate) / 86400000));
           if (diff > 3) {
-            acc.pendingSQC_OverSLA++; acc.totalDays_pendingSQC_OverSLA += diff;
+            acc.pendingSQC_OverSLA++;
+            acc.totalDays_pendingSQC_OverSLA += diff;
             acc.listPendingSmartQc.push({ duid, days: diff, label: `${diff} วัน`, isOver: true, owner: ownerDoc });
           } else {
-            acc.pendingSQC_InSLA++; acc.totalDays_pendingSQC_InSLA += diff;
+            acc.pendingSQC_InSLA++;
+            acc.totalDays_pendingSQC_InSLA += diff;
             acc.listPendingSmartQc.push({ duid, days: diff, label: `${diff} วัน`, isOver: false, owner: ownerDoc });
           }
         } else {
           const diff = Math.max(0, Math.floor((smartQcDate - installDate) / 86400000));
-          if (diff > 3) { acc.doneSQC_OverSLA++; acc.totalDays_doneSQC_OverSLA += diff; }
-          else          { acc.doneSQC_InSLA++;   acc.totalDays_doneSQC_InSLA += diff; }
+          if (diff > 3) {
+            acc.doneSQC_OverSLA++;
+            acc.totalDays_doneSQC_OverSLA += diff;
+          } else {
+            acc.doneSQC_InSLA++;
+            acc.totalDays_doneSQC_InSLA += diff;
+          }
         }
 
         // PAT Subcon (5 days SLA)
@@ -551,23 +515,29 @@ function calculateMetrics() {
           if (smartQcDate) {
             const diff = Math.max(0, Math.floor((today - smartQcDate) / 86400000));
             if (diff > 5) {
-              acc.pendingPat_OverSLA++; acc.totalDays_pendingPat_OverSLA += diff;
+              acc.pendingPat_OverSLA++;
+              acc.totalDays_pendingPat_OverSLA += diff;
               acc.listPendingPat.push({ duid, days: diff, label: `${diff} วัน`, isOver: true, owner: ownerDoc });
             } else {
-              acc.pendingPat_InSLA++; acc.totalDays_pendingPat_InSLA += diff;
+              acc.pendingPat_InSLA++;
+              acc.totalDays_pendingPat_InSLA += diff;
               acc.listPendingPat.push({ duid, days: diff, label: `${diff} วัน`, isOver: false, owner: ownerDoc });
             }
           }
         } else {
           const base = smartQcDate || installDate;
           const diff = Math.max(0, Math.floor((patDate - base) / 86400000));
-          if (diff > 5) { acc.donePat_OverSLA++; acc.totalDays_donePat_OverSLA += diff; }
-          else          { acc.donePat_InSLA++;   acc.totalDays_donePat_InSLA += diff; }
+          if (diff > 5) {
+            acc.donePat_OverSLA++;
+            acc.totalDays_donePat_OverSLA += diff;
+          } else {
+            acc.donePat_InSLA++;
+            acc.totalDays_donePat_InSLA += diff;
+          }
         }
 
-        // Rework (PAT Not Pass / Activity: Closed = Done)
-        const patRemarkLc = patRemark.toLowerCase();
-        if (patRemarkLc.includes('not pass') || patRemarkLc === 'clear pending') {
+        // Rework (PAT Not Pass)
+        if (patRemark.toLowerCase().includes('not pass')) {
           const od = Math.max(0, patDate ? Math.floor((today - patDate) / 86400000) : Math.floor((today - installDate) / 86400000));
           acc.listPatNotPass.push({ duid, days: od, label: `${od} วัน`, isRework: true, owner: ownerDoc });
         }
@@ -644,24 +614,32 @@ function calculateMetrics() {
     // TRUE
     if (isSheet) {
       const rows = state.rawGoogleSheetData.TRUE;
-      if (!rows || rows.length <= 1) return acc;
+      if (!rows || rows.length <= 2) return acc;
 
-      const cols = detectSheetColumns(rows, 'TRUE');
-      const { startRow, idxDuid, idxInstall, idxSmartQc, idxAor, idxPat, idxOwnerDoc, idxPatRemark } = cols;
+      const is56A0UPS = rows[0] && rows[0].length > 60;
+      const idxDuid = is56A0UPS ? 0 : 1;
+      const idxInstall = is56A0UPS ? 66 : 22;
+      const idxSmartQc = is56A0UPS ? 36 : 24;
+      const idxAor = is56A0UPS ? 40 : 23;
+      const idxPatRemark = is56A0UPS ? 44 : 26;
+      const idxPat = is56A0UPS ? 46 : 28;
+      const idxOwnerDoc = is56A0UPS ? 47 : 32;
+      const startRow = is56A0UPS ? 2 : 2;
 
       for (let i = startRow; i < rows.length; i++) {
-        const row = rows[i] || [];
-        const installDate = parseDate(row[idxInstall]); // Verify Photo / Actual Start
+        const row = rows[i];
+        if (row.length <= Math.min(idxInstall, idxOwnerDoc)) continue;
+        const installDate = parseDate(row[idxInstall]); // Verify Photo
         if (!installDate) continue;
         if (selectedYear !== 'ทั้งหมด' && installDate.getFullYear().toString() !== selectedYear) continue;
 
         acc.totalInstall++;
-        const duid = (row[idxDuid] || '').trim() || 'ไม่ระบุ DUID';
-        const ownerDoc = (row[idxOwnerDoc] || '').trim() || '-';
+        const duid = row[idxDuid] ? row[idxDuid].trim() : 'ไม่ระบุ DUID';
+        const ownerDoc = row[idxOwnerDoc] ? row[idxOwnerDoc].trim() : '-';
         const aorDate = parseDate(row[idxAor]);
         const smartQcDate = parseDate(row[idxSmartQc]);
         const patDate = parseDate(row[idxPat]);
-        const patRemark = (row[idxPatRemark] || '').trim();
+        const patRemark = (row[idxPatRemark] || '').trim(); // Integration alarm category
 
         const sqcDone = aorDate && smartQcDate;
         const missingLabel = (!aorDate ? ' ⚠️AOR' : '') + (!smartQcDate ? ' ⚠️SQC' : '');
@@ -669,35 +647,49 @@ function calculateMetrics() {
         if (!sqcDone) {
           const diff = Math.max(0, Math.floor((today - installDate) / 86400000));
           if (diff > 3) {
-            acc.pendingSQC_OverSLA++; acc.totalDays_pendingSQC_OverSLA += diff;
+            acc.pendingSQC_OverSLA++;
+            acc.totalDays_pendingSQC_OverSLA += diff;
             acc.listPendingSmartQc.push({ duid, days: diff, label: `${diff} วัน${missingLabel}`, isOver: true, owner: ownerDoc });
           } else {
-            acc.pendingSQC_InSLA++; acc.totalDays_pendingSQC_InSLA += diff;
+            acc.pendingSQC_InSLA++;
+            acc.totalDays_pendingSQC_InSLA += diff;
             acc.listPendingSmartQc.push({ duid, days: diff, label: `${diff} วัน${missingLabel}`, isOver: false, owner: ownerDoc });
           }
         } else {
           const diff = Math.max(0, Math.floor((smartQcDate - installDate) / 86400000));
-          if (diff > 3) { acc.doneSQC_OverSLA++; acc.totalDays_doneSQC_OverSLA += diff; }
-          else          { acc.doneSQC_InSLA++;   acc.totalDays_doneSQC_InSLA += diff; }
+          if (diff > 3) {
+            acc.doneSQC_OverSLA++;
+            acc.totalDays_doneSQC_OverSLA += diff;
+          } else {
+            acc.doneSQC_InSLA++;
+            acc.totalDays_doneSQC_InSLA += diff;
+          }
         }
 
-        // PAT (5 days SLA)
+        // PAT
         if (!patDate) {
           if (smartQcDate) {
             const diff = Math.max(0, Math.floor((today - smartQcDate) / 86400000));
             if (diff > 5) {
-              acc.pendingPat_OverSLA++; acc.totalDays_pendingPat_OverSLA += diff;
+              acc.pendingPat_OverSLA++;
+              acc.totalDays_pendingPat_OverSLA += diff;
               acc.listPendingPat.push({ duid, days: diff, label: `${diff} วัน`, isOver: true, owner: ownerDoc });
             } else {
-              acc.pendingPat_InSLA++; acc.totalDays_pendingPat_InSLA += diff;
+              acc.pendingPat_InSLA++;
+              acc.totalDays_pendingPat_InSLA += diff;
               acc.listPendingPat.push({ duid, days: diff, label: `${diff} วัน`, isOver: false, owner: ownerDoc });
             }
           }
         } else {
           const base = smartQcDate || installDate;
           const diff = Math.max(0, Math.floor((patDate - base) / 86400000));
-          if (diff > 5) { acc.donePat_OverSLA++; acc.totalDays_donePat_OverSLA += diff; }
-          else          { acc.donePat_InSLA++;   acc.totalDays_donePat_InSLA += diff; }
+          if (diff > 5) {
+            acc.donePat_OverSLA++;
+            acc.totalDays_donePat_OverSLA += diff;
+          } else {
+            acc.donePat_InSLA++;
+            acc.totalDays_donePat_InSLA += diff;
+          }
         }
 
         // Alarm Rework
