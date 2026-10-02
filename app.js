@@ -30,7 +30,8 @@ const state = {
   },
   lineToken: localStorage.getItem('sla_line_token') || 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU=',
   lineGroupId: localStorage.getItem('sla_line_group_id') || 'C9d136fee255c27308ede4164cad0e27d',
-  lineWebhook: localStorage.getItem('sla_line_webhook') || 'https://webhook.site/d43cd402-b87b-4c7f-a8a8-8e58b0cc27ba'
+  lineWebhook: localStorage.getItem('sla_line_webhook') || 'https://webhook.site/d43cd402-b87b-4c7f-a8a8-8e58b0cc27ba',
+  gasWebAppUrl: localStorage.getItem('sla_gas_url') || 'https://script.google.com/macros/s/AKfycbysOK_GAlsnJ12VOLUUm-0qDltWipjba_JKYc2gdzE9M50FaGQ5O-R8gPiqEQK0LopsQQ/exec'
 };
 
 // Colors matching dashboard
@@ -1152,7 +1153,7 @@ function generateLineAlertPreview() {
 
   const gasInput = document.getElementById('gasWebAppUrl');
   if (gasInput) {
-    const savedGasUrl = localStorage.getItem('sla_gas_url') || '';
+    const savedGasUrl = localStorage.getItem('sla_gas_url') || state.gasWebAppUrl;
     if (savedGasUrl) gasInput.value = savedGasUrl;
   }
 }
@@ -1252,7 +1253,7 @@ async function handleSendLineAlert() {
   if (groupId) localStorage.setItem('sla_line_group_id', groupId);
 
   const gasInput = document.getElementById('gasWebAppUrl');
-  const gasUrl = gasInput ? gasInput.value.trim() : (localStorage.getItem('sla_gas_url') || '');
+  const gasUrl = (gasInput ? gasInput.value.trim() : '') || localStorage.getItem('sla_gas_url') || state.gasWebAppUrl;
   if (gasUrl) localStorage.setItem('sla_gas_url', gasUrl);
 
   showToast('กำลังส่งแจ้งเตือน (รูปภาพ + ข้อความ) เข้า LINE Group...', 'info');
