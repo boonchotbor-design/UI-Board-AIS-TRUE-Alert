@@ -292,27 +292,92 @@ function fetchSheetViaJsonp(sheetName) {
   });
 }
 
+// ─── หา column index จาก header row อัตโนมัติ ───
+function detectAisColumns(rows) {
+  const SCAN = Math.min(5, rows.length);
+  const normMap = {};
+  let headerRow = 0;
+  for (let r = 0; r < SCAN; r++) {
+    for (let c = 0; c < (rows[r] || []).length; c++) {
+      const raw = String(rows[r][c] || '').trim();
+      if (!raw) continue;
+      const key = raw.toLowerCase().replace(/[\s._\-\/]/g, '');
+      if (normMap[key] === undefined) normMap[key] = c;
+      if (key === 'duid' || raw.toLowerCase() === 'du id') headerRow = r;
+    }
+  }
+  function pick(candidates, fallback) {
+    for (const k of candidates) {
+      const norm = k.toLowerCase().replace(/[\s._\-\/]/g, '');
+      if (normMap[norm] !== undefined) return normMap[norm];
+    }
+    return fallback;
+  }
+  return {
+    startRow:     headerRow + 1,
+    idxDuid:      pick(['duid','du id'], 0),
+    idxInstall:   pick(['actualstartdate','actualstart','planstartdate','installdate'], 7),
+    idxSmartQc:   pick(['closetime','closedate','smartqc','activitystate'], 11),
+    idxPat:       pick(['deliveryattachmentrequired','deliveryattachment','patdate'], 13),
+    idxOwnerDoc:  pick(['owner','ownerengineering','approvestate'], 9),
+    idxPatRemark: pick(['activitystatus','patremark','remark','remarks'], 10)
+  };
+}
+
+function detectTrueColumns(rows) {
+  const SCAN = Math.min(5, rows.length);
+  const normMap = {};
+  let headerRow = 0;
+  for (let r = 0; r < SCAN; r++) {
+    for (let c = 0; c < (rows[r] || []).length; c++) {
+      const raw = String(rows[r][c] || '').trim();
+      if (!raw) continue;
+      const key = raw.toLowerCase().replace(/[\s._\-\/]/g, '');
+      if (normMap[key] === undefined) normMap[key] = c;
+      if (key === 'duid' || raw.toLowerCase() === 'du id') headerRow = r;
+    }
+  }
+  function pick(candidates, fallback) {
+    for (const k of candidates) {
+      const norm = k.toLowerCase().replace(/[\s._\-\/]/g, '');
+      if (normMap[norm] !== undefined) return normMap[norm];
+    }
+    return fallback;
+  }
+  return {
+    startRow:     headerRow + 1,
+    idxDuid:      pick(['duid','du id'], 0),
+    idxInstall:   pick(['verifyphoto','veriphoto','actualstartdate','actualstart','installdate'], 7),
+    idxSmartQc:   pick(['081smartqc','smartqc','closetime','closedate'], 11),
+    idxAor:       pick(['aor','aordate'], 10),
+    idxPat:       pick(['141a129','patsitef','patdate','pat'], 13),
+    idxOwnerDoc:  pick(['patowner','owner','ownerengineering'], 9),
+    idxPatRemark: pick(['integrationalarmc','alarmcategory','patremark','remark'], 8)
+  };
+}
+
 // Fetch live data from Google Sheet
+// ดึงจากชีต AIS และ True โดยตรงเท่านั้น
 async function loadDataFromGoogleSheet() {
   try {
     const [dataAis, dataTrue] = await Promise.all([
-      fetchSheetViaJsonp('56A0S0Q').catch(() => fetchSheetViaJsonp('AIS')),
-      fetchSheetViaJsonp('56A0UPS').catch(() => fetchSheetViaJsonp('TRUE'))
+      fetchSheetViaJsonp('AIS'),
+      fetchSheetViaJsonp('True')
     ]);
 
-    state.rawGoogleSheetData.AIS = dataAis;
-    state.rawGoogleSheetData.TRUE = dataTrue;
+    state.rawGoogleSheetData.AIS  = dataAis  || [];
+    state.rawGoogleSheetData.TRUE = dataTrue || [];
     state.lastUpdated = new Date();
-    
-    document.getElementById('updateTimestamp').textContent = 
-      `ข้อมูลอัปเดต ณ: ${formatDateTime(state.lastUpdated)} (Google Sheets)`;
+
+    const el = document.getElementById('updateTimestamp');
+    if (el) el.textContent = `ข้อมูลอัปเดต ณ: ${formatDateTime(state.lastUpdated)} (Google Sheets)`;
 
     extractAvailableYears();
     calculateAndRenderDashboard();
-    showToast('โหลดข้อมูลสดจาก Google Sheets สำเร็จเรียบร้อยแล้ว!', 'success');
+    showToast('โหลดข้อมูลสดจาก Google Sheets สำเร็จ!', 'success');
   } catch (err) {
     console.error('Error fetching Google Sheets data:', err);
-    showToast('ไม่สามารถดึงข้อมูลจาก Google Sheets ได้ (กำลังใช้ข้อมูลตัวอย่าง)', 'error');
+    showToast('ไม่สามารถดึงข้อมูลจาก Google Sheets ได้', 'error');
   }
 }
 
@@ -381,47 +446,28 @@ function parseDate(v) {
 // Extract available years from dataset
 function extractAvailableYears() {
   const years = new Set();
-  const dataset = state.dataSource === 'SHEET' ? state.rawGoogleSheetData[state.operator] : state.importedData[state.operator];
+  const dataset = state.dataSource === 'SHEET'
+    ? state.rawGoogleSheetData[state.operator]
+    : state.importedData[state.operator];
 
-  if (state.operator === 'AIS') {
-    if (state.dataSource === 'SHEET' && dataset && dataset.length > 2) {
-      const is56A0S0Q = dataset[0] && dataset[0].length > 40 && String(dataset[0][0]).includes('DU ID');
-      const installCol = is56A0S0Q ? 8 : 30;
-      for (let i = 2; i < dataset.length; i++) {
-        const d = parseDate(dataset[i][installCol]);
-        if (d) years.add(d.getFullYear().toString());
-      }
-    } else if (dataset) {
-      dataset.forEach(item => {
-        if (item.installDate) {
-          const d = parseDate(item.installDate);
-          if (d) years.add(d.getFullYear().toString());
-        }
-      });
+  if (state.dataSource === 'SHEET' && dataset && dataset.length > 1) {
+    const cols = state.operator === 'AIS'
+      ? detectAisColumns(dataset)
+      : detectTrueColumns(dataset);
+    for (let i = cols.startRow; i < dataset.length; i++) {
+      const d = parseDate((dataset[i] || [])[cols.idxInstall]);
+      if (d) years.add(d.getFullYear().toString());
     }
-  } else {
-    // TRUE
-    if (state.dataSource === 'SHEET' && dataset && dataset.length > 2) {
-      const is56A0UPS = dataset[0] && dataset[0].length > 60;
-      const installCol = is56A0UPS ? 66 : 22;
-      for (let i = 2; i < dataset.length; i++) {
-        const d = parseDate(dataset[i][installCol]);
-        if (d) years.add(d.getFullYear().toString());
-      }
-    } else if (dataset) {
-      dataset.forEach(item => {
-        if (item.installDate) {
-          const d = parseDate(item.installDate);
-          if (d) years.add(d.getFullYear().toString());
-        }
-      });
-    }
+  } else if (dataset && Array.isArray(dataset)) {
+    dataset.forEach(item => {
+      const d = parseDate(item.installDate);
+      if (d) years.add(d.getFullYear().toString());
+    });
   }
 
-  const sortedYears = Array.from(years).sort((a,b) => b - a);
+  const sortedYears = Array.from(years).sort((a, b) => b - a);
   state.availableYears = ['ทั้งหมด', ...sortedYears];
 
-  // Update dropdown options
   const select = document.getElementById('yearSelect');
   if (select) {
     select.innerHTML = '';
@@ -463,26 +509,19 @@ function calculateMetrics() {
   if (op === 'AIS') {
     if (isSheet) {
       const rows = state.rawGoogleSheetData.AIS;
-      if (!rows || rows.length <= 2) return acc;
+      if (!rows || rows.length <= 1) return acc;
 
-      const is56A0S0Q = rows[0] && rows[0].length > 40 && String(rows[0][0]).includes('DU ID');
-      const idxInstall = is56A0S0Q ? 8 : 30;
-      const idxSmartQc = is56A0S0Q ? 20 : 31;
-      const idxPat = is56A0S0Q ? 30 : 33;
-      const idxOwnerDoc = is56A0S0Q ? 31 : 37;
-      const idxPatRemark = is56A0S0Q ? 38 : 35;
-      const startRow = is56A0S0Q ? 2 : 2;
+      const { startRow, idxDuid, idxInstall, idxSmartQc, idxPat, idxOwnerDoc, idxPatRemark } = detectAisColumns(rows);
 
       for (let i = startRow; i < rows.length; i++) {
-        const row = rows[i];
-        if (row.length <= Math.min(idxInstall, idxSmartQc)) continue;
+        const row = rows[i] || [];
         const installDate = parseDate(row[idxInstall]);
         if (!installDate) continue;
         if (selectedYear !== 'ทั้งหมด' && installDate.getFullYear().toString() !== selectedYear) continue;
 
         acc.totalInstall++;
-        const duid = row[0] ? row[0].trim() : 'ไม่ระบุ DUID';
-        const ownerDoc = row[idxOwnerDoc] ? row[idxOwnerDoc].trim() : '-';
+        const duid = (row[idxDuid] || '').trim() || 'ไม่ระบุ DUID';
+        const ownerDoc = (row[idxOwnerDoc] || '').trim() || '-';
         const smartQcDate = parseDate(row[idxSmartQc]);
         const patDate = parseDate(row[idxPat]);
         const patRemark = (row[idxPatRemark] || '').trim();
@@ -614,22 +653,13 @@ function calculateMetrics() {
     // TRUE
     if (isSheet) {
       const rows = state.rawGoogleSheetData.TRUE;
-      if (!rows || rows.length <= 2) return acc;
+      if (!rows || rows.length <= 1) return acc;
 
-      const is56A0UPS = rows[0] && rows[0].length > 60;
-      const idxDuid = is56A0UPS ? 0 : 1;
-      const idxInstall = is56A0UPS ? 66 : 22;
-      const idxSmartQc = is56A0UPS ? 36 : 24;
-      const idxAor = is56A0UPS ? 40 : 23;
-      const idxPatRemark = is56A0UPS ? 44 : 26;
-      const idxPat = is56A0UPS ? 46 : 28;
-      const idxOwnerDoc = is56A0UPS ? 47 : 32;
-      const startRow = is56A0UPS ? 2 : 2;
+      const { startRow, idxDuid, idxInstall, idxSmartQc, idxAor, idxPat, idxOwnerDoc, idxPatRemark } = detectTrueColumns(rows);
 
       for (let i = startRow; i < rows.length; i++) {
-        const row = rows[i];
-        if (row.length <= Math.min(idxInstall, idxOwnerDoc)) continue;
-        const installDate = parseDate(row[idxInstall]); // Verify Photo
+        const row = rows[i] || [];
+        const installDate = parseDate(row[idxInstall]); // Verify Photo / Actual Start
         if (!installDate) continue;
         if (selectedYear !== 'ทั้งหมด' && installDate.getFullYear().toString() !== selectedYear) continue;
 
