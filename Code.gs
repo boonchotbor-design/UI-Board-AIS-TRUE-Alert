@@ -714,6 +714,32 @@ function saveImportData(operator, records) {
 }
 
 /**
+ * อัปโหลด base64 image ไปยัง Google Drive แล้วคืน URL สาธารณะ
+ * LINE Messaging API ต้องการ URL (ไม่รองรับ base64 โดยตรง)
+ */
+function uploadImageToDrive_(base64Data) {
+  var cleanBase64 = base64Data.indexOf(',') > -1 ? base64Data.split(',')[1] : base64Data;
+  var blob = Utilities.newBlob(
+    Utilities.base64Decode(cleanBase64),
+    'image/png',
+    'SLA_Dashboard_' + new Date().getTime() + '.png'
+  );
+
+  // หา/สร้างโฟลเดอร์ SLA Dashboard Images ใน Drive
+  var folderName = 'SLA Dashboard Images';
+  var folders = DriveApp.getFoldersByName(folderName);
+  var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
+
+  // อัปโหลดไฟล์ + เปิดสิทธิ์ให้ทุกคนดูได้ (จำเป็นสำหรับ LINE)
+  var file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  // URL ที่ LINE สามารถ fetch ได้โดยตรง
+  var fileId = file.getId();
+  return 'https://drive.google.com/uc?export=view&id=' + fileId;
+}
+
+/**
  * ส่งแจ้งเตือนเข้า LINE ผ่าน LINE Notify Token หรือ LINE Messaging API (บอท SPE_SLA)
  */
 function sendLineAlert(token, message, imageBase64, groupId) {
@@ -750,7 +776,26 @@ function sendLineAlert(token, message, imageBase64, groupId) {
     var pushUrl = 'https://api.line.me/v2/bot/message/push';
     var broadcastUrl = 'https://api.line.me/v2/bot/message/broadcast';
     var headers = { 'Authorization': 'Bearer ' + token };
+
+    // ── อัปโหลดรูปไปยัง Google Drive แล้วรับ URL สาธารณะ ──
+    var imageUrl = null;
+    if (imageBase64) {
+      try {
+        imageUrl = uploadImageToDrive_(imageBase64);
+      } catch(imgUpErr) {
+        Logger.log('Image upload skipped: ' + imgUpErr.message);
+      }
+    }
+
+    // สร้าง messages array (text + image ถ้ามี)
     var msgs = [{ type: 'text', text: message }];
+    if (imageUrl) {
+      msgs.push({
+        type: 'image',
+        originalContentUrl: imageUrl,
+        previewImageUrl: imageUrl
+      });
+    }
 
     // Parse groupIds: แยกด้วย newline หรือ comma แล้ว trim ค่าว่าง
     var groupIds = [];
@@ -814,7 +859,8 @@ function sendLineAlert(token, message, imageBase64, groupId) {
       sent: results.length,
       failed: errors.length,
       groups: results,
-      errors: errors
+      errors: errors,
+      imageUrl: imageUrl || null
     };
 
   } else {
