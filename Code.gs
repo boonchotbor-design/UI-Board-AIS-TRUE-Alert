@@ -9,27 +9,9 @@ var DEFAULT_LINE_TOKEN = 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs
 var DEFAULT_LINE_GROUP_ID = 'C9d136fee255c27308ede4164cad0e27d\nC42aae0c059a87a75d1b8166953108d70\nC3ade9979ac5d2b606210a02797b861b3'; // 3 กลุ่มเริ่มต้น: SPE-SLA, Super Star, TLN_AIS PATDOC
 
 // ─────────────────────────────────────────────────────────────
-// doGet: ดึง Group ID ที่บันทึกไว้ (เรียกผ่าน Web App URL ?action=groupid)
+// doGet: รวมเป็นอันเดียว — serve HTML + action=groupid
+// (ถูกรวมกับ doGet ที่บรรทัด 609 ให้เหลืออันเดียว)
 // ─────────────────────────────────────────────────────────────
-function doGet(e) {
-  var action = e && e.parameter && e.parameter.action ? e.parameter.action : '';
-  if (action === 'groupid') {
-    var gid = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || DEFAULT_LINE_GROUP_ID;
-    return ContentService.createTextOutput('LINE_GROUP_ID=' + gid)
-      .setMimeType(ContentService.MimeType.TEXT);
-  }
-  // Default: open dashboard
-  try {
-    var html = HtmlService.createHtmlOutputFromFile('index')
-      .setTitle('AIS & TRUE SLA Dashboard')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-    return html;
-  } catch(e2) {
-    return ContentService.createTextOutput('Dashboard OK - ' + new Date().toISOString())
-      .setMimeType(ContentService.MimeType.TEXT);
-  }
-}
 
 // ─────────────────────────────────────────────────────────────
 // doPost: LINE Webhook Receiver
@@ -604,22 +586,32 @@ function _buildDashboard(dashSheet, o) {
 // ===========================================================
 
 /**
- * เสิร์ฟ Web App สำหรับเปิดบน Browser อิสระ
+ * doGet: serve Web App + รองรับ ?action=groupid
  */
 function doGet(e) {
-  return HtmlService.createTemplateFromFile('Index')
-      .evaluate()
+  var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
+  if (action === 'groupid') {
+    var gid = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || DEFAULT_LINE_GROUP_ID;
+    return ContentService.createTextOutput('LINE_GROUP_ID=' + gid)
+      .setMimeType(ContentService.MimeType.TEXT);
+  }
+  // Serve Dashboard HTML
+  try {
+    return HtmlService.createHtmlOutputFromFile('Index')
       .setTitle('AIS & TRUE INSTALLATION & SLA DASHBOARD')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  } catch (err) {
+    return ContentService.createTextOutput('Error: ' + err.message)
+      .setMimeType(ContentService.MimeType.TEXT);
+  }
 }
 
 /**
  * เปิด Modal Dialog ขนาดใหญ่ใน Google Sheets
  */
 function showDashboardModal() {
-  var html = HtmlService.createTemplateFromFile('Index')
-      .evaluate()
+  var html = HtmlService.createHtmlOutputFromFile('Index')
       .setWidth(1200)
       .setHeight(850);
   SpreadsheetApp.getUi().showModalDialog(html, '📊 AIS & TRUE SLA Dashboard & Automation');
