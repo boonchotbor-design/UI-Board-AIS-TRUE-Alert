@@ -4,6 +4,9 @@
 //         AOR=col X (index 23), SmartQC=col Y (index 24) จากภาพจริง
 // ===========================================================
 
+// ── LINE Messaging API: Channel Access Token ของบอท SPE_SLA ──
+var DEFAULT_LINE_TOKEN = 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU=';
+
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('📊 Executive Dashboard')
@@ -709,13 +712,15 @@ function sendLineAlert(token, message, imageBase64, groupId) {
  */
 function sendLineAlertAIS() {
   var ui = SpreadsheetApp.getUi();
-  var token = PropertiesService.getUserProperties().getProperty('LINE_NOTIFY_TOKEN');
+  var token = PropertiesService.getUserProperties().getProperty('LINE_NOTIFY_TOKEN') || DEFAULT_LINE_TOKEN;
   if (!token) {
-    var prompt = ui.prompt('📲 ส่งแจ้งเตือน LINE Group (AIS)', 'กรุณากรอก LINE Notify Token:', ui.ButtonSet.OK_CANCEL);
+    var prompt = ui.prompt('📲 ส่งแจ้งเตือน LINE Group (AIS)', 'กรุณากรอก LINE Channel Access Token:', ui.ButtonSet.OK_CANCEL);
     if (prompt.getSelectedButton() !== ui.Button.OK) return;
     token = prompt.getResponseText().trim();
   }
   if (!token) { ui.alert('⚠️ ไม่พบ Token'); return; }
+
+  var groupId = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || '';
 
   // สร้างข้อความสรุป AIS
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -743,7 +748,7 @@ function sendLineAlertAIS() {
             '📱 รายละเอียดเพิ่มเติมดูได้ในแดชบอร์ด';
 
   try {
-    sendLineAlert(token, msg);
+    sendLineAlert(token, msg, null, groupId);
     ui.alert('✅ ส่งสรุปแจ้งเตือนเข้า LINE Group สำเร็จแล้ว!');
   } catch(e) {
     ui.alert('⚠️ เกิดข้อผิดพลาดในการส่ง LINE:\n' + e.message);
@@ -755,13 +760,15 @@ function sendLineAlertAIS() {
  */
 function sendLineAlertTRUE() {
   var ui = SpreadsheetApp.getUi();
-  var token = PropertiesService.getUserProperties().getProperty('LINE_NOTIFY_TOKEN');
+  var token = PropertiesService.getUserProperties().getProperty('LINE_NOTIFY_TOKEN') || DEFAULT_LINE_TOKEN;
   if (!token) {
-    var prompt = ui.prompt('📲 ส่งแจ้งเตือน LINE Group (TRUE)', 'กรุณากรอก LINE Notify Token:', ui.ButtonSet.OK_CANCEL);
+    var prompt = ui.prompt('📲 ส่งแจ้งเตือน LINE Group (TRUE)', 'กรุณากรอก LINE Channel Access Token:', ui.ButtonSet.OK_CANCEL);
     if (prompt.getSelectedButton() !== ui.Button.OK) return;
     token = prompt.getResponseText().trim();
   }
   if (!token) { ui.alert('⚠️ ไม่พบ Token'); return; }
+
+  var groupId = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || '';
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var dash = ss.getSheetByName('Dashboard สรุปงาน TRUE');
@@ -788,7 +795,7 @@ function sendLineAlertTRUE() {
             '📱 รายละเอียดเพิ่มเติมดูได้ในแดชบอร์ด';
 
   try {
-    sendLineAlert(token, msg);
+    sendLineAlert(token, msg, null, groupId);
     ui.alert('✅ ส่งสรุปแจ้งเตือนเข้า LINE Group สำเร็จแล้ว!');
   } catch(e) {
     ui.alert('⚠️ เกิดข้อผิดพลาดในการส่ง LINE:\n' + e.message);

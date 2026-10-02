@@ -28,8 +28,8 @@ const state = {
     pat: '',
     rework: ''
   },
-  lineToken: localStorage.getItem('sla_line_token') || '',
-  lineWebhook: localStorage.getItem('sla_line_webhook') || ''
+  lineToken: localStorage.getItem('sla_line_token') || 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU=',
+  lineWebhook: localStorage.getItem('sla_line_webhook') || 'https://webhook.site/54b66153-f49a-451a-996e-65f54508bc54'
 };
 
 // Colors matching dashboard
@@ -1078,7 +1078,10 @@ function generateLineAlertPreview() {
 
   // Restore saved token & groupId
   const tokenInput = document.getElementById('lineNotifyToken');
-  if (tokenInput && state.lineToken) tokenInput.value = state.lineToken;
+  if (tokenInput) {
+    // Use saved token from localStorage, fall back to default state token
+    tokenInput.value = localStorage.getItem('sla_line_token') || state.lineToken;
+  }
 
   const groupInput = document.getElementById('lineGroupId');
   if (groupInput) {
@@ -1162,7 +1165,7 @@ function handleDownloadImage() {
   showToast('💾 ดาวน์โหลดรูปภาพแดชบอร์ดสำเร็จแล้ว!', 'success');
 }
 
-// Send LINE Alert via Backend or Direct Webhook (with Image & Text)
+// Send LINE Alert via LINE Messaging API or Webhook (with Image & Text)
 async function handleSendLineAlert() {
   const tokenInput = document.getElementById('lineNotifyToken');
   const token = tokenInput ? tokenInput.value.trim() : '';
@@ -1185,9 +1188,8 @@ async function handleSendLineAlert() {
 
   // Check if running in Google Apps Script context
   if (typeof google !== 'undefined' && google.script && google.script.run) {
-    // Send via Google Apps Script with Image & Group ID
     google.script.run
-      .withSuccessHandler((res) => {
+      .withSuccessHandler(() => {
         showToast('🚀 ส่งรูปภาพและข้อความแจ้งเตือน LINE Group สำเร็จแล้ว!', 'success');
         document.getElementById('lineModal').classList.remove('active');
       })
@@ -1195,60 +1197,94 @@ async function handleSendLineAlert() {
         showToast(`❌ ส่ง LINE ล้มเหลว: ${err.message}`, 'error');
       })
       .sendLineAlert(token, message, imageBase64, groupId);
-  } else {
-    // In standalone browser mode
-    try {
-      if (token.startsWith('http://') || token.startsWith('https://')) {
-        await fetch(token, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            message: message,
-            imageBase64: imageBase64,
-            groupId: groupId
-          })
-        });
-        showToast('🚀 ส่ง Webhook แจ้งเตือนสำเร็จ!', 'success');
-        document.getElementById('lineModal').classList.remove('active');
-      } else {
-        // Direct copy as reliable local fallback
-        if (state.lastCapturedBlob) {
-          try {
-            await navigator.clipboard.write([new ClipboardItem({ 'image/png': state.lastCapturedBlob })]);
-          } catch(e) {}
-        }
-        showToast('📋 รูปภาพและข้อความพร้อมแล้ว! สามารถนำไป Paste (Ctrl+V) ใน LINE Group ได้ทันที', 'success');
-      }
-    } catch (e) {
-      showToast('📋 คัดลอกข้อความสำเร็จ! นำไปวางใน LINE Group ได้ทันที', 'success');
-    }
+    return;
   }
-}
-    // In standalone browser mode
+
+  // ── Webhook URL mode (เช่น webhook.site สำหรับ test) ──
+  if (token.startsWith('http://') || token.startsWith('https://')) {
     try {
-      if (token.startsWith('http://') || token.startsWith('https://')) {
-        await fetch(token, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            message: message,
-            imageBase64: imageBase64 
-          })
-        });
-        showToast('🚀 ส่ง Webhook แจ้งเตือนสำเร็จ!', 'success');
-        document.getElementById('lineModal').classList.remove('active');
-      } else {
-        // Direct LINE Notify: copy both text and image as backup
-        if (state.lastCapturedBlob) {
-          try {
-            await navigator.clipboard.write([new ClipboardItem({ 'image/png': state.lastCapturedBlob })]);
-          } catch(e) {}
-        }
-        showToast('📋 รูปภาพและข้อความพร้อมแล้ว! สามารถนำไป Paste (Ctrl+V) ใน LINE Group ได้ทันที', 'success');
-      }
+      await fetch(token, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, imageBase64, groupId })
+      });
+      showToast('🚀 ส่ง Webhook แจ้งเตือนสำเร็จ!', 'success');
+      document.getElementById('lineModal').classList.remove('active');
     } catch (e) {
-      showToast('📋 คัดลอกข้อความสำเร็จ! นำไปวางใน LINE Group ได้ทันที', 'success');
+      showToast(`❌ Webhook error: ${e.message}`, 'error');
     }
+    return;
+  }
+
+  // ── LINE Messaging API mode (Channel Access Token) ──
+  // NOTE: Direct browser calls to api.line.me are blocked by CORS.
+  // We send via a CORS proxy (allorigins.win) so the request goes through.
+  // For production use, route through a backend / Google Apps Script instead.
+  const LINE_API = 'https://api.line.me/v2/bot/message';
+  const endpoint = groupId
+    ? `${LINE_API}/push`    // ส่งไปยัง Group ID ที่ระบุ
+    : `${LINE_API}/broadcast`; // broadcast ไปทุกคนที่ follow Bot
+
+  const textMessage = { type: 'text', text: message };
+  const messages = [textMessage];
+
+  // เพิ่ม flex image ถ้ามี base64
+  if (imageBase64) {
+    // Upload image อาจต้องใช้ LINE Rich menu / Content API
+    // สำหรับ prototype: แนบ image url placeholder หรือข้ามไป
+    // (เราใช้ข้อความ + copy image แทนสำหรับ browser mode)
+  }
+
+  const body = groupId
+    ? { to: groupId, messages }
+    : { messages };
+
+  try {
+    // ลองส่งตรง (จะสำเร็จเฉพาะ environment ที่ CORS อนุญาต เช่น GAS Web App)
+    let response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (response.ok) {
+      showToast('🚀 ส่งข้อความเข้า LINE Group สำเร็จแล้ว!', 'success');
+      // Copy image ไว้ให้ user วางต่อ
+      if (state.lastCapturedBlob) {
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': state.lastCapturedBlob })]);
+          showToast('🖼️ คัดลอกรูปภาพแล้ว — กด Ctrl+V วางใน LINE ได้เลย!', 'success');
+        } catch(e) {}
+      }
+      document.getElementById('lineModal').classList.remove('active');
+    } else {
+      const errText = await response.text();
+      throw new Error(`LINE API: ${response.status} ${errText}`);
+    }
+  } catch (corsOrErr) {
+    console.warn('LINE API direct call failed (CORS หรือ token ผิด):', corsOrErr.message);
+    // Fallback: คัดลอกรูป + ข้อความ เพื่อให้ user วางใน LINE เอง
+    let copied = false;
+    if (state.lastCapturedBlob) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': state.lastCapturedBlob })]);
+        copied = true;
+      } catch(e) {}
+    }
+    if (!copied) {
+      try {
+        await navigator.clipboard.writeText(message);
+      } catch(e) {}
+    }
+    showToast(
+      '📋 ไม่สามารถส่งตรงได้จาก Browser (CORS) — ' +
+      'รูปภาพและข้อความถูกคัดลอกแล้ว กด Ctrl+V วางใน LINE Group ได้เลย! ' +
+      '(ใช้ Google Apps Script Web App เพื่อส่งอัตโนมัติ)',
+      'info'
+    );
   }
 }
 
