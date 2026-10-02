@@ -202,20 +202,72 @@ function updateThemeForOperator(op) {
   }
 }
 
-// Fetch live CSV data from Google Sheet
-async function loadDataFromGoogleSheet() {
-  const SPREADSHEET_ID = '1fi7RCyx74VaBpPH2QO-44gE7vDKGHkFj-Nqp3QGc3E0';
-  const urlAis = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=AIS`;
-  const urlTrue = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=True`;
+// Fetch live data from Google Sheet via JSONP (Bypasses CORS restrictions)
+function fetchSheetViaJsonp(sheetName) {
+  return new Promise((resolve, reject) => {
+    const callbackName = 'gviz_cb_' + Math.random().toString(36).substring(2, 9);
+    const script = document.createElement('script');
+    const SPREADSHEET_ID = '1fi7RCyx74VaBpPH2QO-44gE7vDKGHkFj-Nqp3QGc3E0';
+    const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?sheet=${encodeURIComponent(sheetName)}&tqx=responseHandler:${callbackName}`;
+    
+    let isDone = false;
+    const timeout = setTimeout(() => {
+      if (isDone) return;
+      isDone = true;
+      cleanup();
+      reject(new Error(`Timeout loading sheet: ${sheetName}`));
+    }, 15000);
 
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[callbackName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[callbackName] = function(response) {
+      if (isDone) return;
+      isDone = true;
+      cleanup();
+      if (response && response.status === 'ok' && response.table) {
+        const rows = response.table.rows || [];
+        const cols = response.table.cols || [];
+        const table2d = rows.map(r => {
+          if (!r || !r.c) return new Array(cols.length).fill('');
+          return r.c.map(cell => {
+            if (!cell) return '';
+            if (cell.f !== undefined && cell.f !== null) return String(cell.f);
+            if (cell.v !== undefined && cell.v !== null) return String(cell.v);
+            return '';
+          });
+        });
+        resolve(table2d);
+      } else {
+        reject(new Error(response && response.errors && response.errors[0] ? response.errors[0].message : 'Failed to parse sheet data'));
+      }
+    };
+
+    script.onerror = function() {
+      if (isDone) return;
+      isDone = true;
+      cleanup();
+      reject(new Error(`Network error loading sheet: ${sheetName}`));
+    };
+
+    script.src = url;
+    document.head.appendChild(script);
+  });
+}
+
+// Fetch live data from Google Sheet
+async function loadDataFromGoogleSheet() {
   try {
-    const [resAis, resTrue] = await Promise.all([
-      fetch(urlAis).then(r => r.text()),
-      fetch(urlTrue).then(r => r.text())
+    const [dataAis, dataTrue] = await Promise.all([
+      fetchSheetViaJsonp('AIS'),
+      fetchSheetViaJsonp('TRUE')
     ]);
 
-    state.rawGoogleSheetData.AIS = parseCsv(resAis);
-    state.rawGoogleSheetData.TRUE = parseCsv(resTrue);
+    state.rawGoogleSheetData.AIS = dataAis;
+    state.rawGoogleSheetData.TRUE = dataTrue;
     state.lastUpdated = new Date();
     
     document.getElementById('updateTimestamp').textContent = 
@@ -223,7 +275,7 @@ async function loadDataFromGoogleSheet() {
 
     extractAvailableYears();
     calculateAndRenderDashboard();
-    showToast('โหลดข้อมูลจาก Google Sheets สำเร็จ', 'success');
+    showToast('โหลดข้อมูลสดจาก Google Sheets สำเร็จเรียบร้อยแล้ว!', 'success');
   } catch (err) {
     console.error('Error fetching Google Sheets data:', err);
     showToast('ไม่สามารถดึงข้อมูลจาก Google Sheets ได้ (กำลังใช้ข้อมูลตัวอย่าง)', 'error');
@@ -262,14 +314,22 @@ function parseCsv(text) {
   return result;
 }
 
-// Parse date strings in multiple formats (DD/MM/YYYY, YYYY-MM-DD)
+// Parse date strings in multiple formats (DD/MM/YYYY, YYYY-MM-DD, Date(Y,M,D))
 function parseDate(v) {
-  if (!v || typeof v !== 'string' || !v.trim()) return null;
-  const s = v.trim().split(' ')[0];
+  if (!v) return null;
+  const str = String(v).trim();
+  if (!str) return null;
+
+  // Handle Google Sheet Date(yyyy,m,d) format
+  const dateMatch = str.match(/Date\((\d+),\s*(\d+),\s*(\d+)/);
+  if (dateMatch) {
+    return new Date(parseInt(dateMatch[1], 10), parseInt(dateMatch[2], 10), parseInt(dateMatch[3], 10));
+  }
+
+  const s = str.split(' ')[0];
   if (s.includes('/')) {
     const p = s.split('/');
     if (p.length === 3) {
-      // Check if p[0] is day or year
       if (p[0].length === 4) return new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]));
       return new Date(parseInt(p[2]), parseInt(p[1])-1, parseInt(p[0]));
     }
