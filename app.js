@@ -29,7 +29,7 @@ const state = {
     rework: ''
   },
   lineToken: localStorage.getItem('sla_line_token') || 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU=',
-  lineGroupId: localStorage.getItem('sla_line_group_id') || 'C9d136fee255c27308ede4164cad0e27d\nC98c9b3012aa5f9dabe444276909f33d6',
+  lineGroupId: localStorage.getItem('sla_line_group_id') || 'C9d136fee255c27308ede4164cad0e27d\nC42aae0c059a87a75d1b8166953108d70',
   lineWebhook: localStorage.getItem('sla_line_webhook') || 'https://webhook.site/d43cd402-b87b-4c7f-a8a8-8e58b0cc27ba',
   gasWebAppUrl: localStorage.getItem('sla_gas_url') || 'https://script.google.com/macros/s/AKfycbysOK_GAlsnJ12VOLUUm-0qDltWipjba_JKYc2gdzE9M50FaGQ5O-R8gPiqEQK0LopsQQ/exec'
 };
@@ -1147,8 +1147,16 @@ function generateLineAlertPreview() {
 
   const groupInput = document.getElementById('lineGroupId');
   if (groupInput) {
-    const savedGroup = localStorage.getItem('sla_line_group_id') || state.lineGroupId;
-    if (savedGroup) groupInput.value = savedGroup;
+    let savedGroup = localStorage.getItem('sla_line_group_id') || state.lineGroupId;
+    // ปรับปรุง ID ให้เป็น ID จริงของ Super Star (C42aae0c059a87a75d1b8166953108d70)
+    if (savedGroup.includes('C98c9b3012aa5f9dabe444276909f33d6')) {
+      savedGroup = savedGroup.replace('C98c9b3012aa5f9dabe444276909f33d6', 'C42aae0c059a87a75d1b8166953108d70');
+      localStorage.setItem('sla_line_group_id', savedGroup);
+    } else if (!savedGroup.includes('C42aae0c059a87a75d1b8166953108d70')) {
+      savedGroup = savedGroup.trim() + '\nC42aae0c059a87a75d1b8166953108d70';
+      localStorage.setItem('sla_line_group_id', savedGroup);
+    }
+    groupInput.value = savedGroup;
   }
 
   const gasInput = document.getElementById('gasWebAppUrl');

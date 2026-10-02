@@ -6,7 +6,7 @@
 
 // ── LINE Messaging API: Channel Access Token ของบอท SPE_SLA ──
 var DEFAULT_LINE_TOKEN = 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU=';
-var DEFAULT_LINE_GROUP_ID = 'C9d136fee255c27308ede4164cad0e27d'; // กลุ่ม SPE-SLA-AIS-TRUE
+var DEFAULT_LINE_GROUP_ID = 'C9d136fee255c27308ede4164cad0e27d\nC42aae0c059a87a75d1b8166953108d70'; // กลุ่ม SPE-SLA-AIS-TRUE และ Super Star
 
 // ─────────────────────────────────────────────────────────────
 // doGet: ดึง Group ID ที่บันทึกไว้ (เรียกผ่าน Web App URL ?action=groupid)
