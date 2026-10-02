@@ -1,59 +1,35 @@
-"""
-LINE Group ID Catcher
-รัน script นี้เพื่อจับ Group ID จาก LINE Webhook event
-"""
-import http.server
+import urllib.request
 import json
-import sys
+import time
 
-PORT = 8888
-group_id_found = []
+TOKEN = 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU='
+WEBHOOK_URL = 'https://webhook.site/token/d43cd402-b87b-4c7f-a8a8-8e58b0cc27ba/requests'
 
-class WebhookHandler(http.server.BaseHTTPRequestHandler):
-    def do_POST(self):
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_length)
-        
-        try:
-            data = json.loads(body.decode('utf-8'))
-            print("\n=== LINE Webhook Event Received ===")
-            print(json.dumps(data, indent=2, ensure_ascii=False))
-            
-            # Extract groupId
-            for event in data.get('events', []):
-                source = event.get('source', {})
-                if source.get('type') == 'group':
-                    gid = source.get('groupId', '')
-                    if gid:
-                        print(f"\n✅ LINE GROUP ID FOUND: {gid}")
-                        group_id_found.append(gid)
-        except Exception as e:
-            print(f"Parse error: {e}")
-        
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b'OK')
-    
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        if group_id_found:
-            self.wfile.write(f"GROUP ID: {group_id_found[0]}".encode())
-        else:
-            self.wfile.write(b"Waiting for LINE events...")
-    
-    def log_message(self, format, *args):
-        pass  # suppress default logs
+def check_group_id():
+    req = urllib.request.Request(WEBHOOK_URL, headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            for item in data.get('data', []):
+                raw = item.get('content')
+                if not raw:
+                    continue
+                try:
+                    payload = json.loads(raw)
+                    events = payload.get('events', [])
+                    for ev in events:
+                        source = ev.get('source', {})
+                        if source.get('type') == 'group':
+                            gid = source.get('groupId')
+                            print(f"FOUND_GROUP_ID:{gid}")
+                            return gid
+                except Exception:
+                    pass
+    except Exception as e:
+        print("Error fetching requests:", e)
+    return None
 
 if __name__ == '__main__':
-    server = http.server.HTTPServer(('', PORT), WebhookHandler)
-    print(f"🚀 Webhook server started on port {PORT}")
-    print(f"   กำลังรอ LINE Webhook events...")
-    print(f"   ถ้าใช้ ngrok: ngrok http {PORT}")
-    print(f"   แล้วนำ URL ไปตั้ง Webhook ใน LINE Developer Console\n")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nServer stopped.")
-        if group_id_found:
-            print(f"✅ Group ID: {group_id_found[0]}")
+    gid = check_group_id()
+    if not gid:
+        print("WAITING_FOR_MESSAGE")

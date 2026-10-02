@@ -6,6 +6,7 @@
 
 // ── LINE Messaging API: Channel Access Token ของบอท SPE_SLA ──
 var DEFAULT_LINE_TOKEN = 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU=';
+var DEFAULT_LINE_GROUP_ID = 'C9d136fee255c27308ede4164cad0e27d'; // กลุ่ม SPE-SLA-AIS-TRUE
 
 // ─────────────────────────────────────────────────────────────
 // doGet: ดึง Group ID ที่บันทึกไว้ (เรียกผ่าน Web App URL ?action=groupid)
@@ -13,7 +14,7 @@ var DEFAULT_LINE_TOKEN = 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs
 function doGet(e) {
   var action = e && e.parameter && e.parameter.action ? e.parameter.action : '';
   if (action === 'groupid') {
-    var gid = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || 'ยังไม่พบ Group ID';
+    var gid = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || DEFAULT_LINE_GROUP_ID;
     return ContentService.createTextOutput('LINE_GROUP_ID=' + gid)
       .setMimeType(ContentService.MimeType.TEXT);
   }
@@ -819,7 +820,7 @@ function sendLineAlertAIS() {
   }
   if (!token) { ui.alert('⚠️ ไม่พบ Token'); return; }
 
-  var groupId = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || '';
+  var groupId = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || DEFAULT_LINE_GROUP_ID;
 
   // สร้างข้อความสรุป AIS
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -867,7 +868,7 @@ function sendLineAlertTRUE() {
   }
   if (!token) { ui.alert('⚠️ ไม่พบ Token'); return; }
 
-  var groupId = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || '';
+  var groupId = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || DEFAULT_LINE_GROUP_ID;
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var dash = ss.getSheetByName('Dashboard สรุปงาน TRUE');

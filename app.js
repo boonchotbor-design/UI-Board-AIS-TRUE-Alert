@@ -29,7 +29,8 @@ const state = {
     rework: ''
   },
   lineToken: localStorage.getItem('sla_line_token') || 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU=',
-  lineWebhook: localStorage.getItem('sla_line_webhook') || 'https://webhook.site/54b66153-f49a-451a-996e-65f54508bc54'
+  lineGroupId: localStorage.getItem('sla_line_group_id') || 'C9d136fee255c27308ede4164cad0e27d',
+  lineWebhook: localStorage.getItem('sla_line_webhook') || 'https://webhook.site/d43cd402-b87b-4c7f-a8a8-8e58b0cc27ba'
 };
 
 // Colors matching dashboard
@@ -1085,7 +1086,7 @@ function generateLineAlertPreview() {
 
   const groupInput = document.getElementById('lineGroupId');
   if (groupInput) {
-    const savedGroup = localStorage.getItem('sla_line_group_id') || '';
+    const savedGroup = localStorage.getItem('sla_line_group_id') || state.lineGroupId;
     if (savedGroup) groupInput.value = savedGroup;
   }
 }
