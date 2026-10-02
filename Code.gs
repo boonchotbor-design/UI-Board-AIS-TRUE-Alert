@@ -230,8 +230,8 @@ function createAisDashboard() {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var ssTz = "Asia/Bangkok";
-    var sourceSheet = ss.getSheetByName("AIS");
-    if (!sourceSheet) { SpreadsheetApp.getUi().alert("⚠️ ไม่พบชีต 'AIS'"); return; }
+    var sourceSheet = ss.getSheetByName("56A0S0Q") || ss.getSheetByName("AIS");
+    if (!sourceSheet) { SpreadsheetApp.getUi().alert("⚠️ ไม่พบชีต '56A0S0Q' หรือ 'AIS'"); return; }
 
     var dashSheet = _getOrCreateSheet_(ss, "Dashboard สรุปงาน");
     var selectedYear = _readAndClearDash_(dashSheet);
@@ -240,15 +240,20 @@ function createAisDashboard() {
     if (!data || data.length <= 1) return;
 
     var headers      = data[0];
-    var idxInstall   = 30, idxSmartQc=31, idxPat=33, idxPatRemark=35, idxOwnerDoc=37;
-    var idxDuid = 0;
-    for (var c=0;c<headers.length;c++) {
-      if ((headers[c]?String(headers[c]).trim().toLowerCase():"").includes("duid")) {idxDuid=c;break;}
-    }
+    var sheetName    = sourceSheet.getName();
+    var is56A0S0Q    = (sheetName === "56A0S0Q") || (headers.length > 50 && String(headers[0]).toLowerCase().includes("du id"));
+
+    var idxDuid      = 0;
+    var idxInstall   = is56A0S0Q ? 8 : 30;
+    var idxSmartQc   = is56A0S0Q ? 20 : 31;
+    var idxPat       = is56A0S0Q ? 30 : 33;
+    var idxOwnerDoc  = is56A0S0Q ? 31 : 37;
+    var idxPatRemark = is56A0S0Q ? 38 : 35;
+    var startRow     = is56A0S0Q ? 2 : 1; // 56A0S0Q มีแถวที่ 2 เป็นค่าผลรวม (subtotal) ข้อมูลจริงเริ่มแถว 3 (index 2)
 
     var today = toDateOnly_(new Date(), ssTz);
     var availableYears={};
-    for (var i=1;i<data.length;i++) {
+    for (var i=startRow;i<data.length;i++) {
       var d=data[i][idxInstall];
       if(d&&d!==""){var dd=d instanceof Date?d:new Date(d);if(!isNaN(dd.getTime()))availableYears[dd.getFullYear()]=true;}
     }
@@ -257,7 +262,7 @@ function createAisDashboard() {
     var acc = _newAccumulators_();
     var C = _colors_();
 
-    for (var i=1;i<data.length;i++) {
+    for (var i=startRow;i<data.length;i++) {
       var row=data[i];
       if(row.length<=idxPatRemark) continue;
       var installDate=toDateOnly_(row[idxInstall],ssTz); if(!installDate) continue;
@@ -300,8 +305,8 @@ function createTrueDashboard() {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var ssTz = "Asia/Bangkok";
-    var sourceSheet = ss.getSheetByName("True");
-    if (!sourceSheet) { SpreadsheetApp.getUi().alert("⚠️ ไม่พบชีต 'True'"); return; }
+    var sourceSheet = ss.getSheetByName("56A0UPS") || ss.getSheetByName("True") || ss.getSheetByName("TRUE");
+    if (!sourceSheet) { SpreadsheetApp.getUi().alert("⚠️ ไม่พบชีต '56A0UPS' หรือ 'True'"); return; }
 
     var dashSheet = _getOrCreateSheet_(ss, "Dashboard สรุปงาน TRUE");
     var selectedYear = _readAndClearDash_(dashSheet);
@@ -309,21 +314,36 @@ function createTrueDashboard() {
     var data = sourceSheet.getDataRange().getValues();
     if (!data || data.length <= 1) return;
 
-    // ✅ หา column indices จาก header จริง
-    var idx = getTrueColumnIndices_(data);
-    var headerRowIdx  = idx.headerRowIdx;
-    var idxDuid       = idx.idxDuid;
-    var idxVerifyPhoto= idx.idxVerifyPhoto;
-    var idxAor        = idx.idxAor;
-    var idxSmartQc    = idx.idxSmartQc;
-    var idxPat        = idx.idxPat;
-    var idxPatRemark  = idx.idxPatRemark;
-    var idxOwnerDoc   = idx.idxOwnerDoc;
+    var sheetName = sourceSheet.getName();
+    var is56A0UPS = (sheetName === "56A0UPS") || (data[0] && data[0].length > 60);
+
+    var startRow = 1;
+    var idxDuid, idxVerifyPhoto, idxAor, idxSmartQc, idxPat, idxPatRemark, idxOwnerDoc;
+
+    if (is56A0UPS) {
+      idxDuid        = 0;  // Col A
+      idxVerifyPhoto = 66; // Col BO (Verify Photo Actual End Date)
+      idxSmartQc     = 36; // Col AK (08.1 SmartQC Actual End Date)
+      idxAor         = 40; // Col AO (AOR Actual End Date)
+      idxPatRemark   = 44; // Col AS (Integration alarm category)
+      idxPat         = 46; // Col AU (14.1 A129 PAT Site Folder Actual End Date)
+      idxOwnerDoc    = 47; // Col AV (PAT Owner)
+      startRow       = 2;  // ข้าม header row 1 และ subtotal row 2
+    } else {
+      var idx = getTrueColumnIndices_(data);
+      startRow       = idx.headerRowIdx + 1;
+      idxDuid        = idx.idxDuid;
+      idxVerifyPhoto = idx.idxVerifyPhoto;
+      idxAor         = idx.idxAor;
+      idxSmartQc     = idx.idxSmartQc;
+      idxPat         = idx.idxPat;
+      idxPatRemark   = idx.idxPatRemark;
+      idxOwnerDoc    = idx.idxOwnerDoc;
+    }
 
     var today = toDateOnly_(new Date(), ssTz);
     var availableYears={};
-    // ✅ data เริ่มหลัง headerRowIdx
-    for (var i=headerRowIdx+1;i<data.length;i++) {
+    for (var i=startRow;i<data.length;i++) {
       var d=data[i][idxVerifyPhoto];
       if(d&&d!==""){var dd=d instanceof Date?d:new Date(d);if(!isNaN(dd.getTime()))availableYears[dd.getFullYear()]=true;}
     }
@@ -332,7 +352,7 @@ function createTrueDashboard() {
     var acc = _newAccumulators_();
     var C = _colors_();
 
-    for (var i=headerRowIdx+1;i<data.length;i++) {
+    for (var i=startRow;i<data.length;i++) {
       var row=data[i];
       var installDate=toDateOnly_(row[idxVerifyPhoto],ssTz); if(!installDate) continue;
       if(selectedYear!=="ทั้งหมด"&&installDate.getFullYear().toString()!==selectedYear) continue;
@@ -623,18 +643,21 @@ function saveImportData(operator, records) {
   if (!records || records.length === 0) return { success: false, message: 'ไม่มีข้อมูลนำเข้า' };
   
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheetName = (operator === 'AIS') ? 'AIS' : 'True';
-  var sheet = ss.getSheetByName(sheetName);
+  var sheetName = (operator === 'AIS') ? '56A0S0Q' : '56A0UPS';
+  var sheet = ss.getSheetByName(sheetName) || ss.getSheetByName(operator === 'AIS' ? 'AIS' : 'True');
   if (!sheet) return { success: false, message: 'ไม่พบชีต: ' + sheetName };
+  var activeSheetName = sheet.getName();
+  var isNewFormat = (activeSheetName === '56A0S0Q' || activeSheetName === '56A0UPS');
 
   var data = sheet.getDataRange().getValues();
   var duidRowMap = {};
   
   // สร้าง map DUID ที่มีอยู่เดิมในชีต
   if (operator === 'AIS') {
-    // Row 2 คือ Header (index 1), Data เริ่ม row index 2
-    for (var r = 2; r < data.length; r++) {
-      var d = data[r][0] ? String(data[r][0]).trim() : '';
+    var duidCol = 0;
+    var startRow = isNewFormat ? 2 : 2;
+    for (var r = startRow; r < data.length; r++) {
+      var d = data[r][duidCol] ? String(data[r][duidCol]).trim() : '';
       if (d) duidRowMap[d] = r + 1; // 1-based row index
     }
 
@@ -645,37 +668,57 @@ function saveImportData(operator, records) {
       if (!duid) continue;
 
       var targetRow = duidRowMap[duid];
-      if (targetRow) {
-        // อัปเดตข้อมูลวันที่ และสถานะ
-        if (rec.installDate) sheet.getRange(targetRow, 31).setValue(rec.installDate); // col AE (31)
-        if (rec.smartQcDate) sheet.getRange(targetRow, 32).setValue(rec.smartQcDate); // col AF (32)
-        if (rec.patDate) sheet.getRange(targetRow, 34).setValue(rec.patDate); // col AH (34)
-        if (rec.patRemark) sheet.getRange(targetRow, 36).setValue(rec.patRemark); // col AJ (36)
-        if (rec.patStatus) sheet.getRange(targetRow, 37).setValue(rec.patStatus); // col AK (37)
-        if (rec.owner && rec.owner !== '-') sheet.getRange(targetRow, 38).setValue(rec.owner); // col AL (38)
+      if (isNewFormat) {
+        if (targetRow) {
+          if (rec.installDate) sheet.getRange(targetRow, 9).setValue(rec.installDate);   // col I (9)
+          if (rec.smartQcDate) sheet.getRange(targetRow, 21).setValue(rec.smartQcDate); // col U (21)
+          if (rec.patDate) sheet.getRange(targetRow, 31).setValue(rec.patDate);         // col AE (31)
+          if (rec.owner && rec.owner !== '-') sheet.getRange(targetRow, 32).setValue(rec.owner); // col AF (32)
+          if (rec.patRemark) sheet.getRange(targetRow, 39).setValue(rec.patRemark);     // col AM (39)
+          if (rec.patStatus) sheet.getRange(targetRow, 40).setValue(rec.patStatus);     // col AN (40)
+        } else {
+          var newRow = new Array(50).fill('');
+          newRow[0] = duid;
+          newRow[8] = rec.installDate || '';
+          newRow[20] = rec.smartQcDate || '';
+          newRow[30] = rec.patDate || '';
+          newRow[31] = rec.owner || '-';
+          newRow[38] = rec.patRemark || '';
+          newRow[39] = rec.patStatus || '';
+          sheet.appendRow(newRow);
+          duidRowMap[duid] = sheet.getLastRow();
+        }
       } else {
-        // Append แถวใหม่
-        var newRow = new Array(45).fill('');
-        newRow[0] = duid;
-        newRow[30] = rec.installDate || '';
-        newRow[31] = rec.smartQcDate || '';
-        newRow[33] = rec.patDate || '';
-        newRow[35] = rec.patRemark || '';
-        newRow[36] = rec.patStatus || '';
-        newRow[37] = rec.owner || '-';
-        sheet.appendRow(newRow);
-        duidRowMap[duid] = sheet.getLastRow();
+        if (targetRow) {
+          if (rec.installDate) sheet.getRange(targetRow, 31).setValue(rec.installDate); // col AE (31)
+          if (rec.smartQcDate) sheet.getRange(targetRow, 32).setValue(rec.smartQcDate); // col AF (32)
+          if (rec.patDate) sheet.getRange(targetRow, 34).setValue(rec.patDate); // col AH (34)
+          if (rec.patRemark) sheet.getRange(targetRow, 36).setValue(rec.patRemark); // col AJ (36)
+          if (rec.patStatus) sheet.getRange(targetRow, 37).setValue(rec.patStatus); // col AK (37)
+          if (rec.owner && rec.owner !== '-') sheet.getRange(targetRow, 38).setValue(rec.owner); // col AL (38)
+        } else {
+          var newRow = new Array(45).fill('');
+          newRow[0] = duid;
+          newRow[30] = rec.installDate || '';
+          newRow[31] = rec.smartQcDate || '';
+          newRow[33] = rec.patDate || '';
+          newRow[35] = rec.patRemark || '';
+          newRow[36] = rec.patStatus || '';
+          newRow[37] = rec.owner || '-';
+          sheet.appendRow(newRow);
+          duidRowMap[duid] = sheet.getLastRow();
+        }
       }
     }
 
-    // สั่งคำนวณและวาด Dashboard AIS ใหม่ทันที
     createAisDashboard();
 
   } else {
     // TRUE
-    // Data เริ่มต้นที่ row 4 (index 3), col B คือ DUID
-    for (var r = 3; r < data.length; r++) {
-      var d = data[r][1] ? String(data[r][1]).trim() : '';
+    var duidCol = isNewFormat ? 0 : 1;
+    var startRow = isNewFormat ? 2 : 3;
+    for (var r = startRow; r < data.length; r++) {
+      var d = data[r][duidCol] ? String(data[r][duidCol]).trim() : '';
       if (d) duidRowMap[d] = r + 1;
     }
 
@@ -685,28 +728,49 @@ function saveImportData(operator, records) {
       if (!duid) continue;
 
       var targetRow = duidRowMap[duid];
-      if (targetRow) {
-        if (rec.installDate) sheet.getRange(targetRow, 23).setValue(rec.installDate); // col W (23)
-        if (rec.aorDate) sheet.getRange(targetRow, 24).setValue(rec.aorDate); // col X (24)
-        if (rec.smartQcDate) sheet.getRange(targetRow, 25).setValue(rec.smartQcDate); // col Y (25)
-        if (rec.alarmRemark) sheet.getRange(targetRow, 27).setValue(rec.alarmRemark); // col AA (27)
-        if (rec.patDate) sheet.getRange(targetRow, 29).setValue(rec.patDate); // col AC (29)
-        if (rec.owner && rec.owner !== '-') sheet.getRange(targetRow, 33).setValue(rec.owner); // col AG (33)
+      if (isNewFormat) {
+        if (targetRow) {
+          if (rec.smartQcDate) sheet.getRange(targetRow, 37).setValue(rec.smartQcDate); // col AK (37)
+          if (rec.aorDate) sheet.getRange(targetRow, 41).setValue(rec.aorDate);         // col AO (41)
+          if (rec.alarmRemark) sheet.getRange(targetRow, 45).setValue(rec.alarmRemark); // col AS (45)
+          if (rec.patDate) sheet.getRange(targetRow, 47).setValue(rec.patDate);         // col AU (47)
+          if (rec.owner && rec.owner !== '-') sheet.getRange(targetRow, 48).setValue(rec.owner); // col AV (48)
+          if (rec.installDate) sheet.getRange(targetRow, 67).setValue(rec.installDate); // col BO (67)
+        } else {
+          var newRow = new Array(70).fill('');
+          newRow[0] = duid;
+          newRow[36] = rec.smartQcDate || '';
+          newRow[40] = rec.aorDate || '';
+          newRow[44] = rec.alarmRemark || '';
+          newRow[46] = rec.patDate || '';
+          newRow[47] = rec.owner || '-';
+          newRow[66] = rec.installDate || '';
+          sheet.appendRow(newRow);
+          duidRowMap[duid] = sheet.getLastRow();
+        }
       } else {
-        var newRow = new Array(35).fill('');
-        newRow[1] = duid;
-        newRow[22] = rec.installDate || '';
-        newRow[23] = rec.aorDate || '';
-        newRow[24] = rec.smartQcDate || '';
-        newRow[26] = rec.alarmRemark || '';
-        newRow[28] = rec.patDate || '';
-        newRow[32] = rec.owner || '-';
-        sheet.appendRow(newRow);
-        duidRowMap[duid] = sheet.getLastRow();
+        if (targetRow) {
+          if (rec.installDate) sheet.getRange(targetRow, 23).setValue(rec.installDate); // col W (23)
+          if (rec.aorDate) sheet.getRange(targetRow, 24).setValue(rec.aorDate); // col X (24)
+          if (rec.smartQcDate) sheet.getRange(targetRow, 25).setValue(rec.smartQcDate); // col Y (25)
+          if (rec.alarmRemark) sheet.getRange(targetRow, 27).setValue(rec.alarmRemark); // col AA (27)
+          if (rec.patDate) sheet.getRange(targetRow, 29).setValue(rec.patDate); // col AC (29)
+          if (rec.owner && rec.owner !== '-') sheet.getRange(targetRow, 33).setValue(rec.owner); // col AG (33)
+        } else {
+          var newRow = new Array(35).fill('');
+          newRow[1] = duid;
+          newRow[22] = rec.installDate || '';
+          newRow[23] = rec.aorDate || '';
+          newRow[24] = rec.smartQcDate || '';
+          newRow[26] = rec.alarmRemark || '';
+          newRow[28] = rec.patDate || '';
+          newRow[32] = rec.owner || '-';
+          sheet.appendRow(newRow);
+          duidRowMap[duid] = sheet.getLastRow();
+        }
       }
     }
 
-    // สั่งคำนวณและวาด Dashboard TRUE ใหม่ทันที
     createTrueDashboard();
   }
 

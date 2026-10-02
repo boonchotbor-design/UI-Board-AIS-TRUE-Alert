@@ -296,8 +296,8 @@ function fetchSheetViaJsonp(sheetName) {
 async function loadDataFromGoogleSheet() {
   try {
     const [dataAis, dataTrue] = await Promise.all([
-      fetchSheetViaJsonp('AIS'),
-      fetchSheetViaJsonp('TRUE')
+      fetchSheetViaJsonp('56A0S0Q').catch(() => fetchSheetViaJsonp('AIS')),
+      fetchSheetViaJsonp('56A0UPS').catch(() => fetchSheetViaJsonp('TRUE'))
     ]);
 
     state.rawGoogleSheetData.AIS = dataAis;
@@ -384,26 +384,36 @@ function extractAvailableYears() {
   const dataset = state.dataSource === 'SHEET' ? state.rawGoogleSheetData[state.operator] : state.importedData[state.operator];
 
   if (state.operator === 'AIS') {
-    if (state.dataSource === 'SHEET' && dataset) {
+    if (state.dataSource === 'SHEET' && dataset && dataset.length > 2) {
+      const is56A0S0Q = dataset[0] && dataset[0].length > 40 && String(dataset[0][0]).includes('DU ID');
+      const installCol = is56A0S0Q ? 8 : 30;
       for (let i = 2; i < dataset.length; i++) {
-        const d = parseDate(dataset[i][30]);
+        const d = parseDate(dataset[i][installCol]);
         if (d) years.add(d.getFullYear().toString());
       }
     } else if (dataset) {
       dataset.forEach(item => {
-        if (item.installDate) years.add(new Date(item.installDate).getFullYear().toString());
+        if (item.installDate) {
+          const d = parseDate(item.installDate);
+          if (d) years.add(d.getFullYear().toString());
+        }
       });
     }
   } else {
     // TRUE
-    if (state.dataSource === 'SHEET' && dataset) {
+    if (state.dataSource === 'SHEET' && dataset && dataset.length > 2) {
+      const is56A0UPS = dataset[0] && dataset[0].length > 60;
+      const installCol = is56A0UPS ? 66 : 22;
       for (let i = 2; i < dataset.length; i++) {
-        const d = parseDate(dataset[i][22]);
+        const d = parseDate(dataset[i][installCol]);
         if (d) years.add(d.getFullYear().toString());
       }
     } else if (dataset) {
       dataset.forEach(item => {
-        if (item.installDate) years.add(new Date(item.installDate).getFullYear().toString());
+        if (item.installDate) {
+          const d = parseDate(item.installDate);
+          if (d) years.add(d.getFullYear().toString());
+        }
       });
     }
   }
@@ -455,19 +465,27 @@ function calculateMetrics() {
       const rows = state.rawGoogleSheetData.AIS;
       if (!rows || rows.length <= 2) return acc;
 
-      for (let i = 2; i < rows.length; i++) {
+      const is56A0S0Q = rows[0] && rows[0].length > 40 && String(rows[0][0]).includes('DU ID');
+      const idxInstall = is56A0S0Q ? 8 : 30;
+      const idxSmartQc = is56A0S0Q ? 20 : 31;
+      const idxPat = is56A0S0Q ? 30 : 33;
+      const idxOwnerDoc = is56A0S0Q ? 31 : 37;
+      const idxPatRemark = is56A0S0Q ? 38 : 35;
+      const startRow = is56A0S0Q ? 2 : 2;
+
+      for (let i = startRow; i < rows.length; i++) {
         const row = rows[i];
-        if (row.length <= 35) continue;
-        const installDate = parseDate(row[30]);
+        if (row.length <= Math.min(idxInstall, idxSmartQc)) continue;
+        const installDate = parseDate(row[idxInstall]);
         if (!installDate) continue;
         if (selectedYear !== 'ทั้งหมด' && installDate.getFullYear().toString() !== selectedYear) continue;
 
         acc.totalInstall++;
         const duid = row[0] ? row[0].trim() : 'ไม่ระบุ DUID';
-        const ownerDoc = row[37] ? row[37].trim() : '-';
-        const smartQcDate = parseDate(row[31]);
-        const patDate = parseDate(row[33]);
-        const patRemark = (row[35] || '').trim();
+        const ownerDoc = row[idxOwnerDoc] ? row[idxOwnerDoc].trim() : '-';
+        const smartQcDate = parseDate(row[idxSmartQc]);
+        const patDate = parseDate(row[idxPat]);
+        const patRemark = (row[idxPatRemark] || '').trim();
 
         // Smart QC (3 days SLA)
         if (!smartQcDate) {
@@ -598,20 +616,30 @@ function calculateMetrics() {
       const rows = state.rawGoogleSheetData.TRUE;
       if (!rows || rows.length <= 2) return acc;
 
-      for (let i = 2; i < rows.length; i++) {
+      const is56A0UPS = rows[0] && rows[0].length > 60;
+      const idxDuid = is56A0UPS ? 0 : 1;
+      const idxInstall = is56A0UPS ? 66 : 22;
+      const idxSmartQc = is56A0UPS ? 36 : 24;
+      const idxAor = is56A0UPS ? 40 : 23;
+      const idxPatRemark = is56A0UPS ? 44 : 26;
+      const idxPat = is56A0UPS ? 46 : 28;
+      const idxOwnerDoc = is56A0UPS ? 47 : 32;
+      const startRow = is56A0UPS ? 2 : 2;
+
+      for (let i = startRow; i < rows.length; i++) {
         const row = rows[i];
-        if (row.length <= 28) continue;
-        const installDate = parseDate(row[22]); // Verify Photo (col W)
+        if (row.length <= Math.min(idxInstall, idxOwnerDoc)) continue;
+        const installDate = parseDate(row[idxInstall]); // Verify Photo
         if (!installDate) continue;
         if (selectedYear !== 'ทั้งหมด' && installDate.getFullYear().toString() !== selectedYear) continue;
 
         acc.totalInstall++;
-        const duid = row[1] ? row[1].trim() : 'ไม่ระบุ DUID';
-        const ownerDoc = row[32] ? row[32].trim() : '-';
-        const aorDate = parseDate(row[23]);
-        const smartQcDate = parseDate(row[24]);
-        const patDate = parseDate(row[28]);
-        const patRemark = (row[26] || '').trim(); // Integration alarm category
+        const duid = row[idxDuid] ? row[idxDuid].trim() : 'ไม่ระบุ DUID';
+        const ownerDoc = row[idxOwnerDoc] ? row[idxOwnerDoc].trim() : '-';
+        const aorDate = parseDate(row[idxAor]);
+        const smartQcDate = parseDate(row[idxSmartQc]);
+        const patDate = parseDate(row[idxPat]);
+        const patRemark = (row[idxPatRemark] || '').trim(); // Integration alarm category
 
         const sqcDone = aorDate && smartQcDate;
         const missingLabel = (!aorDate ? ' ⚠️AOR' : '') + (!smartQcDate ? ' ⚠️SQC' : '');
@@ -1013,6 +1041,23 @@ function handleExcelFileUpload(file) {
             console.error('GAS save failed:', err);
           })
           .saveImportData(detectedOp, parsedRecords);
+      } else if (state.gasWebAppUrl) {
+        showToast('กำลังซิงค์ข้อมูลกับ Google Spreadsheet...', 'info');
+        fetch(state.gasWebAppUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'saveImportData',
+            operator: detectedOp,
+            records: parsedRecords
+          })
+        }).then(r => r.json()).then(res => {
+          if (res && res.success) {
+            showToast(`อัปเดตลง Google Sheets (${detectedOp}) สำเร็จ! (${res.count || parsedRecords.length} แถว)`, 'success');
+          }
+        }).catch(err => {
+          console.warn('Sync to GAS Web App failed:', err);
+        });
       }
     } catch (err) {
       console.error('Excel parse error:', err);
