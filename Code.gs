@@ -649,35 +649,41 @@ function saveImportData(operator, records) {
   var activeSheetName = sheet.getName();
   var isNewFormat = (activeSheetName === '56A0S0Q' || activeSheetName === '56A0UPS');
 
-  var data = sheet.getDataRange().getValues();
+  var lastRow = sheet.getLastRow();
+  var lastCol = Math.max(sheet.getLastColumn(), isNewFormat ? (operator === 'AIS' ? 45 : 70) : 40);
+  if (lastRow < 2) return { success: false, message: 'ชีตว่างเปล่า ไม่มีข้อมูลเดิม' };
+
+  var range = sheet.getRange(1, 1, lastRow, lastCol);
+  var data = range.getValues();
   var duidRowMap = {};
   
-  // สร้าง map DUID ที่มีอยู่เดิมในชีต
+  // ── AIS ──
   if (operator === 'AIS') {
-    var duidCol = 0;
-    var startRow = isNewFormat ? 2 : 2;
+    var duidCol = 0; // Col A
+    var startRow = isNewFormat ? 2 : 2; // ข้าม header และ subtotal
     for (var r = startRow; r < data.length; r++) {
       var d = data[r][duidCol] ? String(data[r][duidCol]).trim() : '';
-      if (d) duidRowMap[d] = r + 1; // 1-based row index
+      if (d) duidRowMap[d] = r; // 0-based array index
     }
 
-    // ทำการ update หรือ append
+    var appendRows = [];
     for (var i = 0; i < records.length; i++) {
       var rec = records[i];
       var duid = rec.duid;
       if (!duid) continue;
 
-      var targetRow = duidRowMap[duid];
+      var targetIdx = duidRowMap[duid];
       if (isNewFormat) {
-        if (targetRow) {
-          if (rec.installDate) sheet.getRange(targetRow, 9).setValue(rec.installDate);   // col I (9)
-          if (rec.smartQcDate) sheet.getRange(targetRow, 21).setValue(rec.smartQcDate); // col U (21)
-          if (rec.patDate) sheet.getRange(targetRow, 31).setValue(rec.patDate);         // col AE (31)
-          if (rec.owner && rec.owner !== '-') sheet.getRange(targetRow, 32).setValue(rec.owner); // col AF (32)
-          if (rec.patRemark) sheet.getRange(targetRow, 39).setValue(rec.patRemark);     // col AM (39)
-          if (rec.patStatus) sheet.getRange(targetRow, 40).setValue(rec.patStatus);     // col AN (40)
+        if (targetIdx !== undefined) {
+          // อัปเดตในหน่วยความจำ (In-Memory) รวดเร็วระดับมิลลิวินาที
+          if (rec.installDate) data[targetIdx][8] = rec.installDate;   // col I (index 8)
+          if (rec.smartQcDate) data[targetIdx][20] = rec.smartQcDate; // col U (index 20)
+          if (rec.patDate) data[targetIdx][30] = rec.patDate;         // col AE (index 30)
+          if (rec.owner && rec.owner !== '-') data[targetIdx][31] = rec.owner; // col AF (index 31)
+          if (rec.patRemark) data[targetIdx][38] = rec.patRemark;     // col AM (index 38)
+          if (rec.patStatus) data[targetIdx][39] = rec.patStatus;     // col AN (index 39)
         } else {
-          var newRow = new Array(50).fill('');
+          var newRow = new Array(lastCol).fill('');
           newRow[0] = duid;
           newRow[8] = rec.installDate || '';
           newRow[20] = rec.smartQcDate || '';
@@ -685,19 +691,18 @@ function saveImportData(operator, records) {
           newRow[31] = rec.owner || '-';
           newRow[38] = rec.patRemark || '';
           newRow[39] = rec.patStatus || '';
-          sheet.appendRow(newRow);
-          duidRowMap[duid] = sheet.getLastRow();
+          appendRows.push(newRow);
         }
       } else {
-        if (targetRow) {
-          if (rec.installDate) sheet.getRange(targetRow, 31).setValue(rec.installDate); // col AE (31)
-          if (rec.smartQcDate) sheet.getRange(targetRow, 32).setValue(rec.smartQcDate); // col AF (32)
-          if (rec.patDate) sheet.getRange(targetRow, 34).setValue(rec.patDate); // col AH (34)
-          if (rec.patRemark) sheet.getRange(targetRow, 36).setValue(rec.patRemark); // col AJ (36)
-          if (rec.patStatus) sheet.getRange(targetRow, 37).setValue(rec.patStatus); // col AK (37)
-          if (rec.owner && rec.owner !== '-') sheet.getRange(targetRow, 38).setValue(rec.owner); // col AL (38)
+        if (targetIdx !== undefined) {
+          if (rec.installDate) data[targetIdx][30] = rec.installDate;
+          if (rec.smartQcDate) data[targetIdx][31] = rec.smartQcDate;
+          if (rec.patDate) data[targetIdx][33] = rec.patDate;
+          if (rec.patRemark) data[targetIdx][35] = rec.patRemark;
+          if (rec.patStatus) data[targetIdx][36] = rec.patStatus;
+          if (rec.owner && rec.owner !== '-') data[targetIdx][37] = rec.owner;
         } else {
-          var newRow = new Array(45).fill('');
+          var newRow = new Array(lastCol).fill('');
           newRow[0] = duid;
           newRow[30] = rec.installDate || '';
           newRow[31] = rec.smartQcDate || '';
@@ -705,39 +710,47 @@ function saveImportData(operator, records) {
           newRow[35] = rec.patRemark || '';
           newRow[36] = rec.patStatus || '';
           newRow[37] = rec.owner || '-';
-          sheet.appendRow(newRow);
-          duidRowMap[duid] = sheet.getLastRow();
+          appendRows.push(newRow);
         }
       }
+    }
+
+    // เขียนข้อมูลอัปเดตลงชีตครั้งเดียวรวดเดียว (1 Single Write)
+    range.setValues(data);
+
+    // หากมีแถวใหม่ที่เพิ่มเข้ามา เขียนต่อท้ายใน 1 คำสั่ง
+    if (appendRows.length > 0) {
+      sheet.getRange(lastRow + 1, 1, appendRows.length, lastCol).setValues(appendRows);
     }
 
     createAisDashboard();
 
   } else {
-    // TRUE
+    // ── TRUE ──
     var duidCol = isNewFormat ? 0 : 1;
     var startRow = isNewFormat ? 2 : 3;
     for (var r = startRow; r < data.length; r++) {
       var d = data[r][duidCol] ? String(data[r][duidCol]).trim() : '';
-      if (d) duidRowMap[d] = r + 1;
+      if (d) duidRowMap[d] = r;
     }
 
+    var appendRows = [];
     for (var i = 0; i < records.length; i++) {
       var rec = records[i];
       var duid = rec.duid;
       if (!duid) continue;
 
-      var targetRow = duidRowMap[duid];
+      var targetIdx = duidRowMap[duid];
       if (isNewFormat) {
-        if (targetRow) {
-          if (rec.smartQcDate) sheet.getRange(targetRow, 37).setValue(rec.smartQcDate); // col AK (37)
-          if (rec.aorDate) sheet.getRange(targetRow, 41).setValue(rec.aorDate);         // col AO (41)
-          if (rec.alarmRemark) sheet.getRange(targetRow, 45).setValue(rec.alarmRemark); // col AS (45)
-          if (rec.patDate) sheet.getRange(targetRow, 47).setValue(rec.patDate);         // col AU (47)
-          if (rec.owner && rec.owner !== '-') sheet.getRange(targetRow, 48).setValue(rec.owner); // col AV (48)
-          if (rec.installDate) sheet.getRange(targetRow, 67).setValue(rec.installDate); // col BO (67)
+        if (targetIdx !== undefined) {
+          if (rec.smartQcDate) data[targetIdx][36] = rec.smartQcDate; // col AK (index 36)
+          if (rec.aorDate) data[targetIdx][40] = rec.aorDate;         // col AO (index 40)
+          if (rec.alarmRemark) data[targetIdx][44] = rec.alarmRemark; // col AS (index 44)
+          if (rec.patDate) data[targetIdx][46] = rec.patDate;         // col AU (index 46)
+          if (rec.owner && rec.owner !== '-') data[targetIdx][47] = rec.owner; // col AV (index 47)
+          if (rec.installDate) data[targetIdx][66] = rec.installDate; // col BO (index 66)
         } else {
-          var newRow = new Array(70).fill('');
+          var newRow = new Array(lastCol).fill('');
           newRow[0] = duid;
           newRow[36] = rec.smartQcDate || '';
           newRow[40] = rec.aorDate || '';
@@ -745,19 +758,18 @@ function saveImportData(operator, records) {
           newRow[46] = rec.patDate || '';
           newRow[47] = rec.owner || '-';
           newRow[66] = rec.installDate || '';
-          sheet.appendRow(newRow);
-          duidRowMap[duid] = sheet.getLastRow();
+          appendRows.push(newRow);
         }
       } else {
-        if (targetRow) {
-          if (rec.installDate) sheet.getRange(targetRow, 23).setValue(rec.installDate); // col W (23)
-          if (rec.aorDate) sheet.getRange(targetRow, 24).setValue(rec.aorDate); // col X (24)
-          if (rec.smartQcDate) sheet.getRange(targetRow, 25).setValue(rec.smartQcDate); // col Y (25)
-          if (rec.alarmRemark) sheet.getRange(targetRow, 27).setValue(rec.alarmRemark); // col AA (27)
-          if (rec.patDate) sheet.getRange(targetRow, 29).setValue(rec.patDate); // col AC (29)
-          if (rec.owner && rec.owner !== '-') sheet.getRange(targetRow, 33).setValue(rec.owner); // col AG (33)
+        if (targetIdx !== undefined) {
+          if (rec.installDate) data[targetIdx][22] = rec.installDate;
+          if (rec.aorDate) data[targetIdx][23] = rec.aorDate;
+          if (rec.smartQcDate) data[targetIdx][24] = rec.smartQcDate;
+          if (rec.alarmRemark) data[targetIdx][26] = rec.alarmRemark;
+          if (rec.patDate) data[targetIdx][28] = rec.patDate;
+          if (rec.owner && rec.owner !== '-') data[targetIdx][32] = rec.owner;
         } else {
-          var newRow = new Array(35).fill('');
+          var newRow = new Array(lastCol).fill('');
           newRow[1] = duid;
           newRow[22] = rec.installDate || '';
           newRow[23] = rec.aorDate || '';
@@ -765,16 +777,59 @@ function saveImportData(operator, records) {
           newRow[26] = rec.alarmRemark || '';
           newRow[28] = rec.patDate || '';
           newRow[32] = rec.owner || '-';
-          sheet.appendRow(newRow);
-          duidRowMap[duid] = sheet.getLastRow();
+          appendRows.push(newRow);
         }
       }
+    }
+
+    range.setValues(data);
+
+    if (appendRows.length > 0) {
+      sheet.getRange(lastRow + 1, 1, appendRows.length, lastCol).setValues(appendRows);
     }
 
     createTrueDashboard();
   }
 
   return { success: true, count: records.length, message: 'นำเข้าข้อมูล ' + operator + ' สำเร็จแล้ว' };
+}
+
+/**
+ * นำเข้าทั้งตาราง 2D Array จากไฟล์ Excel วางลงในชีตเป้าหมายโดยตรงใน 1 วินาที
+ */
+function importFullSheet(sheetTarget, full2dTable) {
+  if (!full2dTable || full2dTable.length === 0) return { success: false, message: 'ไม่มีข้อมูล' };
+  
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(sheetTarget);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetTarget);
+  }
+
+  var maxCols = 0;
+  for (var r = 0; r < full2dTable.length; r++) {
+    if (full2dTable[r] && full2dTable[r].length > maxCols) maxCols = full2dTable[r].length;
+  }
+  if (maxCols === 0) return { success: false, message: 'ข้อมูลไม่มีคอลัมน์' };
+
+  var padded = full2dTable.map(function(row) {
+    var r = row ? row.slice() : [];
+    while (r.length < maxCols) r.push('');
+    return r;
+  });
+
+  // เคลียร์และเขียนทับทั้งหมดใน 1 คำสั่ง
+  sheet.clearContents();
+  sheet.getRange(1, 1, padded.length, maxCols).setValues(padded);
+
+  // คำนวณแดชบอร์ดตามค่าย
+  if (sheetTarget === '56A0S0Q' || sheetTarget === 'AIS') {
+    createAisDashboard();
+  } else if (sheetTarget === '56A0UPS' || sheetTarget === 'True') {
+    createTrueDashboard();
+  }
+
+  return { success: true, count: padded.length, message: 'นำเข้าตาราง ' + sheetTarget + ' ทั้งหมดสำเร็จเรียบร้อยแล้ว' };
 }
 
 /**

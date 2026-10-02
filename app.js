@@ -1032,15 +1032,19 @@ function handleExcelFileUpload(file) {
 
       // If in Google Apps Script context, ask or push to Google Sheet
       if (typeof google !== 'undefined' && google.script && google.script.run) {
-        showToast('กำลังซิงค์ข้อมูลกับ Google Spreadsheet...', 'info');
+        const targetSheet = detectedOp === 'AIS' ? '56A0S0Q' : '56A0UPS';
+        showToast(`กำลังนำเข้าข้อมูลลงชีต ${targetSheet}...`, 'info');
         google.script.run
           .withSuccessHandler((res) => {
-            showToast('อัปเดตข้อมูลลง Google Spreadsheet เรียบร้อยแล้ว!', 'success');
+            showToast(`✅ อัปเดตข้อมูลลงชีต ${targetSheet} ใน Google Spreadsheet สำเร็จแล้ว!`, 'success');
           })
           .withFailureHandler((err) => {
-            console.error('GAS save failed:', err);
+            console.warn('importFullSheet failed, trying saveImportData fallback:', err);
+            google.script.run
+              .withSuccessHandler(() => showToast('อัปเดตข้อมูลลง Google Spreadsheet สำเร็จแล้ว!', 'success'))
+              .saveImportData(detectedOp, parsedRecords);
           })
-          .saveImportData(detectedOp, parsedRecords);
+          .importFullSheet(targetSheet, jsonRows);
       } else if (state.gasWebAppUrl) {
         showToast('กำลังซิงค์ข้อมูลกับ Google Spreadsheet...', 'info');
         fetch(state.gasWebAppUrl, {
