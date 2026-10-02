@@ -1238,7 +1238,11 @@ async function handleSendLineAlert() {
   const tokenInput = document.getElementById('lineNotifyToken');
   const token = tokenInput ? tokenInput.value.trim() : '';
   const groupInput = document.getElementById('lineGroupId');
-  const groupId = groupInput ? groupInput.value.trim() : '';
+  // รองรับทั้ง input และ textarea — ค่าอาจมีหลายบรรทัด
+  const groupIdRaw = groupInput ? groupInput.value.trim() : '';
+  // normalize: แยก newline/comma แล้วกรองว่าง
+  const groupIds = groupIdRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0);
+  const groupId = groupIds.join('\n'); // ส่งเป็น string ที่ Code.gs parse ต่อ
   const message = document.getElementById('lineMessagePreview').textContent;
   const imageBase64 = state.lastCapturedBase64 || null;
 
@@ -1250,19 +1254,21 @@ async function handleSendLineAlert() {
   // Save token & group for next time
   localStorage.setItem('sla_line_token', token);
   state.lineToken = token;
-  if (groupId) localStorage.setItem('sla_line_group_id', groupId);
+  if (groupIdRaw) localStorage.setItem('sla_line_group_id', groupIdRaw);
 
   const gasInput = document.getElementById('gasWebAppUrl');
   const gasUrl = (gasInput ? gasInput.value.trim() : '') || localStorage.getItem('sla_gas_url') || state.gasWebAppUrl;
   if (gasUrl) localStorage.setItem('sla_gas_url', gasUrl);
 
-  showToast('กำลังส่งแจ้งเตือน (รูปภาพ + ข้อความ) เข้า LINE Group...', 'info');
+  const groupCount = groupIds.length;
+  showToast(`กำลังส่งแจ้งเตือนเข้า ${groupCount > 0 ? groupCount + ' กลุ่ม' : 'LINE (Broadcast)'} ...`, 'info');
 
   // Check if running in Google Apps Script context
   if (typeof google !== 'undefined' && google.script && google.script.run) {
     google.script.run
-      .withSuccessHandler(() => {
-        showToast('🚀 ส่งรูปภาพและข้อความแจ้งเตือน LINE Group สำเร็จแล้ว!', 'success');
+      .withSuccessHandler((res) => {
+        const sentCount = (res && res.sent) ? res.sent : groupCount;
+        showToast(`🚀 ส่งแจ้งเตือนสำเร็จ ${sentCount} กลุ่ม!` + (res && res.failed > 0 ? ` (ล้มเหลว ${res.failed} กลุ่ม)` : ''), 'success');
         document.getElementById('lineModal').classList.remove('active');
       })
       .withFailureHandler((err) => {
@@ -1287,7 +1293,7 @@ async function handleSendLineAlert() {
         }),
         mode: 'no-cors'
       });
-      showToast('🚀 ส่งข้อมูลแจ้งเตือนเข้า LINE Group สำเร็จแล้ว (ผ่าน Google Apps Script)!', 'success');
+      showToast(`🚀 ส่งแจ้งเตือนเข้า ${groupCount > 0 ? groupCount + ' กลุ่ม' : 'LINE'} สำเร็จแล้ว (ผ่าน Google Apps Script)!`, 'success');
       if (state.lastCapturedBlob) {
         try {
           await navigator.clipboard.write([new ClipboardItem({ 'image/png': state.lastCapturedBlob })]);
@@ -1380,9 +1386,8 @@ async function handleSendLineAlert() {
       } catch(e) {}
     }
     showToast(
-      '📋 ไม่สามารถส่งตรงได้จาก Browser (CORS) — ' +
-      'รูปภาพและข้อความถูกคัดลอกแล้ว กด Ctrl+V วางใน LINE Group ได้เลย! ' +
-      '(ใช้ Google Apps Script Web App เพื่อส่งอัตโนมัติ)',
+      `📋 ไม่สามารถส่งตรงจาก Browser (CORS) — ข้อมูล${groupCount > 1 ? ` (${groupCount} กลุ่ม)` : ''}ถูกคัดลอกแล้ว กด Ctrl+V วางใน LINE ได้เลย! ` +
+      '(กรอก GAS Web App URL ด้านบนเพื่อส่งอัตโนมัติ)',
       'info'
     );
   }

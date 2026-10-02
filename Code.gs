@@ -746,33 +746,77 @@ function sendLineAlert(token, message, imageBase64, groupId) {
     return { success: true, response: res.getContentText() };
   } else if (token.length > 80) {
     // 2. กรณีเป็น LINE Messaging API Channel Access Token (บอท SPE_SLA)
-    // ถ้ารู้ groupId ให้ส่งแบบ push ตรงเข้ากลุ่ม, ถ้าไม่รู้ให้ broadcast
-    var url = groupId ? 'https://api.line.me/v2/bot/message/push' : 'https://api.line.me/v2/bot/message/broadcast';
-    var payload = {
-      messages: [
-        {
-          type: 'text',
-          text: message
-        }
-      ]
-    };
-    if (groupId) payload.to = groupId;
+    // รองรับหลาย groupId คั่นด้วย comma หรือ newline
+    var pushUrl = 'https://api.line.me/v2/bot/message/push';
+    var broadcastUrl = 'https://api.line.me/v2/bot/message/broadcast';
+    var headers = { 'Authorization': 'Bearer ' + token };
+    var msgs = [{ type: 'text', text: message }];
 
-    var options = {
-      method: 'post',
-      contentType: 'application/json',
-      headers: {
-        'Authorization': 'Bearer ' + token
-      },
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    };
-    var res = UrlFetchApp.fetch(url, options);
-    var resCode = res.getResponseCode();
-    if (resCode !== 200) {
-      throw new Error('LINE Messaging API Error (' + resCode + '): ' + res.getContentText());
+    // Parse groupIds: แยกด้วย newline หรือ comma แล้ว trim ค่าว่าง
+    var groupIds = [];
+    if (groupId) {
+      groupIds = String(groupId).split(/[\n,]+/)
+        .map(function(id) { return id.trim(); })
+        .filter(function(id) { return id.length > 0; });
     }
-    return { success: true, response: res.getContentText() };
+
+    if (groupIds.length === 0) {
+      // Broadcast ถ้าไม่มี Group ID
+      var payload = JSON.stringify({ messages: msgs });
+      var options = {
+        method: 'post',
+        contentType: 'application/json',
+        headers: headers,
+        payload: payload,
+        muteHttpExceptions: true
+      };
+      var res = UrlFetchApp.fetch(broadcastUrl, options);
+      var resCode = res.getResponseCode();
+      if (resCode !== 200) {
+        throw new Error('LINE Broadcast Error (' + resCode + '): ' + res.getContentText());
+      }
+      return { success: true, response: res.getContentText(), groups: ['broadcast'] };
+    }
+
+    // Push ไปทุก Group ID
+    var results = [];
+    var errors = [];
+    for (var g = 0; g < groupIds.length; g++) {
+      var gid = groupIds[g];
+      try {
+        var pushPayload = JSON.stringify({ to: gid, messages: msgs });
+        var pushOptions = {
+          method: 'post',
+          contentType: 'application/json',
+          headers: headers,
+          payload: pushPayload,
+          muteHttpExceptions: true
+        };
+        var pushRes = UrlFetchApp.fetch(pushUrl, pushOptions);
+        var pushCode = pushRes.getResponseCode();
+        if (pushCode !== 200) {
+          errors.push(gid + ': ' + pushCode + ' ' + pushRes.getContentText());
+        } else {
+          results.push(gid);
+          // บันทึก Group ID แรกที่สำเร็จ
+          if (g === 0) PropertiesService.getScriptProperties().setProperty('SAVED_LINE_GROUP_ID', gid);
+        }
+      } catch(pushErr) {
+        errors.push(gid + ': ' + pushErr.message);
+      }
+    }
+
+    if (errors.length > 0 && results.length === 0) {
+      throw new Error('ส่งทุกกลุ่มล้มเหลว: ' + errors.join(' | '));
+    }
+    return {
+      success: true,
+      sent: results.length,
+      failed: errors.length,
+      groups: results,
+      errors: errors
+    };
+
   } else {
     // 3. กรณีเป็น LINE Notify Token (ปกติความยาว 43 ตัวอักษร)
     var url = 'https://notify-api.line.me/api/notify';
