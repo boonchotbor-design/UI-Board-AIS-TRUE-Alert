@@ -29,10 +29,32 @@ const state = {
     rework: ''
   },
   lineToken: localStorage.getItem('sla_line_token') || 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU=',
-  lineGroupId: localStorage.getItem('sla_line_group_id') || 'C9d136fee255c27308ede4164cad0e27d\nC42aae0c059a87a75d1b8166953108d70',
+  lineGroupId: getCleanGroupIds_(),
   lineWebhook: localStorage.getItem('sla_line_webhook') || 'https://webhook.site/d43cd402-b87b-4c7f-a8a8-8e58b0cc27ba',
   gasWebAppUrl: localStorage.getItem('sla_gas_url') || 'https://script.google.com/macros/s/AKfycbysOK_GAlsnJ12VOLUUm-0qDltWipjba_JKYc2gdzE9M50FaGQ5O-R8gPiqEQK0LopsQQ/exec'
 };
+
+const DEFAULT_LINE_GROUP_IDS = 'C9d136fee255c27308ede4164cad0e27d\nC42aae0c059a87a75d1b8166953108d70\nC3ade9979ac5d2b606210a02797b861b3';
+
+function getCleanGroupIds_() {
+  let val = localStorage.getItem('sla_line_group_id') || '';
+  val = val.replace(/C98c9b3012aa5f9dabe444276909f33d6/g, 'C42aae0c059a87a75d1b8166953108d70').trim();
+  if (!val || val === 'C9d136fee255c27308ede4164cad0e27d') {
+    val = DEFAULT_LINE_GROUP_IDS;
+  } else {
+    if (!val.includes('C42aae0c059a87a75d1b8166953108d70')) {
+      val += '\nC42aae0c059a87a75d1b8166953108d70';
+    }
+    if (!val.includes('C3ade9979ac5d2b606210a02797b861b3')) {
+      val += '\nC3ade9979ac5d2b606210a02797b861b3';
+    }
+    if (!val.includes('C9d136fee255c27308ede4164cad0e27d')) {
+      val = 'C9d136fee255c27308ede4164cad0e27d\n' + val;
+    }
+  }
+  try { localStorage.setItem('sla_line_group_id', val); } catch(e) {}
+  return val;
+}
 
 // Colors matching dashboard
 const COLORS = {
@@ -149,6 +171,17 @@ function initUIEventListeners() {
   if (copyImageBtn) copyImageBtn.addEventListener('click', handleCopyImage);
   if (downloadImageBtn) downloadImageBtn.addEventListener('click', handleDownloadImage);
   if (sendLineBtn) sendLineBtn.addEventListener('click', handleSendLineAlert);
+
+  const resetGroupIdsBtn = document.getElementById('resetGroupIdsBtn');
+  if (resetGroupIdsBtn) {
+    resetGroupIdsBtn.addEventListener('click', () => {
+      localStorage.setItem('sla_line_group_id', DEFAULT_LINE_GROUP_IDS);
+      state.lineGroupId = DEFAULT_LINE_GROUP_IDS;
+      const groupInput = document.getElementById('lineGroupId');
+      if (groupInput) groupInput.value = DEFAULT_LINE_GROUP_IDS;
+      showToast('🔄 รีเซ็ตเป็น 2 กลุ่มเริ่มต้น (SPE-SLA-AIS-TRUE + Super Star) สำเร็จแล้ว!', 'success');
+    });
+  }
 
   // Search in tables
   const sqcSearch = document.getElementById('sqcSearch');
@@ -1147,16 +1180,8 @@ function generateLineAlertPreview() {
 
   const groupInput = document.getElementById('lineGroupId');
   if (groupInput) {
-    let savedGroup = localStorage.getItem('sla_line_group_id') || state.lineGroupId;
-    // ปรับปรุง ID ให้เป็น ID จริงของ Super Star (C42aae0c059a87a75d1b8166953108d70)
-    if (savedGroup.includes('C98c9b3012aa5f9dabe444276909f33d6')) {
-      savedGroup = savedGroup.replace('C98c9b3012aa5f9dabe444276909f33d6', 'C42aae0c059a87a75d1b8166953108d70');
-      localStorage.setItem('sla_line_group_id', savedGroup);
-    } else if (!savedGroup.includes('C42aae0c059a87a75d1b8166953108d70')) {
-      savedGroup = savedGroup.trim() + '\nC42aae0c059a87a75d1b8166953108d70';
-      localStorage.setItem('sla_line_group_id', savedGroup);
-    }
-    groupInput.value = savedGroup;
+    const cleanGroups = getCleanGroupIds_();
+    groupInput.value = cleanGroups;
   }
 
   const gasInput = document.getElementById('gasWebAppUrl');
@@ -1334,50 +1359,37 @@ async function handleSendLineAlert() {
   // NOTE: Direct browser calls to api.line.me are blocked by CORS.
   // We send via a CORS proxy (allorigins.win) so the request goes through.
   // For production use, route through a backend / Google Apps Script instead.
-  const LINE_API = 'https://api.line.me/v2/bot/message';
-  const endpoint = groupId
-    ? `${LINE_API}/push`    // ส่งไปยัง Group ID ที่ระบุ
-    : `${LINE_API}/broadcast`; // broadcast ไปทุกคนที่ follow Bot
-
-  const textMessage = { type: 'text', text: message };
-  const messages = [textMessage];
-
-  // เพิ่ม flex image ถ้ามี base64
-  if (imageBase64) {
-    // Upload image อาจต้องใช้ LINE Rich menu / Content API
-    // สำหรับ prototype: แนบ image url placeholder หรือข้ามไป
-    // (เราใช้ข้อความ + copy image แทนสำหรับ browser mode)
-  }
-
-  const body = groupId
-    ? { to: groupId, messages }
-    : { messages };
-
   try {
-    // ลองส่งตรง (จะสำเร็จเฉพาะ environment ที่ CORS อนุญาต เช่น GAS Web App)
-    let response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(body)
-    });
-
-    if (response.ok) {
-      showToast('🚀 ส่งข้อความเข้า LINE Group สำเร็จแล้ว!', 'success');
-      // Copy image ไว้ให้ user วางต่อ
-      if (state.lastCapturedBlob) {
-        try {
-          await navigator.clipboard.write([new ClipboardItem({ 'image/png': state.lastCapturedBlob })]);
-          showToast('🖼️ คัดลอกรูปภาพแล้ว — กด Ctrl+V วางใน LINE ได้เลย!', 'success');
-        } catch(e) {}
+    if (groupIds.length > 0) {
+      for (const gid of groupIds) {
+        await fetch(`${LINE_API}/push`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ to: gid, messages: [{ type: 'text', text: message }] })
+        });
       }
-      document.getElementById('lineModal').classList.remove('active');
     } else {
-      const errText = await response.text();
-      throw new Error(`LINE API: ${response.status} ${errText}`);
+      await fetch(`${LINE_API}/broadcast`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ messages: [{ type: 'text', text: message }] })
+      });
     }
+
+    showToast(`🚀 ส่งข้อความเข้า ${groupIds.length > 0 ? groupIds.length + ' กลุ่ม' : 'LINE'} สำเร็จแล้ว!`, 'success');
+    if (state.lastCapturedBlob) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': state.lastCapturedBlob })]);
+        showToast('🖼️ คัดลอกรูปภาพแล้ว — กด Ctrl+V วางใน LINE ได้เลย!', 'success');
+      } catch(e) {}
+    }
+    document.getElementById('lineModal').classList.remove('active');
   } catch (corsOrErr) {
     console.warn('LINE API direct call failed (CORS หรือ token ผิด):', corsOrErr.message);
     // Fallback: คัดลอกรูป + ข้อความ เพื่อให้ user วางใน LINE เอง

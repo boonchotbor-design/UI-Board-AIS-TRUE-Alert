@@ -6,7 +6,7 @@
 
 // ── LINE Messaging API: Channel Access Token ของบอท SPE_SLA ──
 var DEFAULT_LINE_TOKEN = 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU=';
-var DEFAULT_LINE_GROUP_ID = 'C9d136fee255c27308ede4164cad0e27d\nC42aae0c059a87a75d1b8166953108d70'; // กลุ่ม SPE-SLA-AIS-TRUE และ Super Star
+var DEFAULT_LINE_GROUP_ID = 'C9d136fee255c27308ede4164cad0e27d\nC42aae0c059a87a75d1b8166953108d70\nC3ade9979ac5d2b606210a02797b861b3'; // 3 กลุ่มเริ่มต้น: SPE-SLA, Super Star, TLN_AIS PATDOC
 
 // ─────────────────────────────────────────────────────────────
 // doGet: ดึง Group ID ที่บันทึกไว้ (เรียกผ่าน Web App URL ?action=groupid)
@@ -35,7 +35,7 @@ function doGet(e) {
 // doPost: LINE Webhook Receiver
 //   - รับ events จาก LINE เมื่อมีข้อความในกลุ่ม
 //   - บันทึก groupId อัตโนมัติ
-//   - ถ้า source.type == 'group' และข้อความมี /groupid → reply ด้วย Group ID
+//   - ถ้า source.type == 'group' และข้อความมี /groupid หรือ /idgroup → reply ด้วย Group ID
 //   - รองรับ saveImportData และ sendLineAlert จาก Web App frontend
 // ─────────────────────────────────────────────────────────────
 function doPost(e) {
@@ -61,8 +61,8 @@ function doPost(e) {
           // ถ้ามีข้อความ → reply Group ID กลับในกลุ่ม
           if (evt.type === 'message' && evt.message && evt.message.type === 'text') {
             var replyToken = evt.replyToken;
-            var text = evt.message.text || '';
-            if (text.toLowerCase().indexOf('/groupid') >= 0 || text.toLowerCase().indexOf('groupid') >= 0) {
+            var text = (evt.message.text || '').toLowerCase().trim();
+            if (text.indexOf('/groupid') >= 0 || text.indexOf('groupid') >= 0 || text.indexOf('/idgroup') >= 0 || text.indexOf('idgroup') >= 0) {
               replyLineMessage_(replyToken, '🤖 SPE_SLA Bot\n\n✅ LINE Group ID:\n' + source.groupId + '\n\nกรุณาคัดลอก ID นี้ไปกรอกในหน้า Dashboard ที่ช่อง "LINE Group ID" ครับ');
             }
           }

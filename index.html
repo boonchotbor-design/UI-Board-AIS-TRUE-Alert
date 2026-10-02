@@ -1034,14 +1034,29 @@
         </div>
 
         <div class="form-group">
-          <label for="lineGroupId">LINE Group IDs (ใส่ได้หลายกลุ่ม — แต่ละบรรทัด 1 Group ID)</label>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label for="lineGroupId" style="margin-bottom: 0;">LINE Group IDs (ใส่ได้หลายกลุ่ม — แต่ละบรรทัด 1 Group ID):</label>
+            <button type="button" id="resetGroupIdsBtn" style="background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; color: #38bdf8; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; cursor: pointer;">
+              🔄 รีเซ็ตเป็น 3 กลุ่มเริ่มต้น
+            </button>
+          </div>
           <textarea id="lineGroupId" class="form-control" rows="3" style="resize: vertical; font-family: monospace; font-size: 0.8rem; line-height: 1.6;"
-            placeholder="C9d136fee255c27308ede4164cad0e27d&#10;C42aae0c059a87a75d1b8166953108d70">C9d136fee255c27308ede4164cad0e27d
-C42aae0c059a87a75d1b8166953108d70</textarea>
+            placeholder="C9d136fee255c27308ede4164cad0e27d&#10;C42aae0c059a87a75d1b8166953108d70&#10;C3ade9979ac5d2b606210a02797b861b3">C9d136fee255c27308ede4164cad0e27d
+C42aae0c059a87a75d1b8166953108d70
+C3ade9979ac5d2b606210a02797b861b3</textarea>
+          <div style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
+            <span style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #10b981; font-size: 0.75rem; padding: 3px 8px; border-radius: 4px;">
+              🟢 กลุ่ม 1: SPE-SLA-AIS-TRUE
+            </span>
+            <span style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; font-size: 0.75rem; padding: 3px 8px; border-radius: 4px;">
+              ⭐ กลุ่ม 2: Super Star
+            </span>
+            <span style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #f59e0b; font-size: 0.75rem; padding: 3px 8px; border-radius: 4px;">
+              📑 กลุ่ม 3: TLN_AIS PATDOC
+            </span>
+          </div>
           <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; display: block;">
-            💡 <strong>หลายกลุ่ม:</strong> ใส่ Group ID แต่ละกลุ่มแยกบรรทัด หรือคั่นด้วยจุลภาค (,) ระบบจะส่งไปทุกกลุ่มพร้อมกัน<br>
-            📌 <strong>หา Group ID:</strong> เพิ่ม Bot เข้ากลุ่ม → พิมพ์ <code>/groupid</code> ในกลุ่มนั้น Bot จะ reply ID กลับมา<br>
-            🤖 <strong>Bot ต้องอยู่ในกลุ่มก่อน</strong> จึงจะส่งเข้ากลุ่มนั้นได้
+            💡 <strong>ส่งหลายกลุ่ม:</strong> ใส่ Group ID แต่ละกลุ่มแยกบรรทัด ระบบจะส่งแจ้งเตือนไปทุกกลุ่มพร้อมกันอัตโนมัติ
           </small>
         </div>
 
@@ -1092,6 +1107,6 @@ C42aae0c059a87a75d1b8166953108d70</textarea>
   </div>
 
   <!-- Embedded Application Logic for GAS -->
-  <script src="app.js"></script>
+  <script src="app.js?v=20261002_02"></script>
 </body>
 </html>
