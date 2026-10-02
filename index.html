@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIS & TRUE INSTALLATION & SLA DASHBOARD</title>
+  
+  <!-- Modern Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js & SheetJS & html2canvas -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  
+  <style>
+    :root {
+      --bg-primary: #0b1120;
+      --bg-secondary: #111827;
+      --bg-card: rgba(17, 24, 39, 0.85);
+      --bg-card-hover: rgba(30, 41, 59, 0.9);
+      --border-color: #1e293b;
+      --border-focus: #38bdf8;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      
+      --ais-color: #10b981;
+      --ais-glow: rgba(16, 185, 129, 0.25);
+      --true-color: #ef4444;
+      --true-glow: rgba(239, 68, 68, 0.25);
+      
+      --status-green: #10b981;
+      --status-yellow: #f59e0b;
+      --status-blue: #3b82f6;
+      --status-red: #ef4444;
+      --status-orange: #f97316;
+      
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --shadow-card: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Prompt', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      background: var(--bg-primary);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(239, 68, 68, 0.08) 0px, transparent 50%),
+        radial-gradient(at 50% 100%, rgba(59, 130, 246, 0.05) 0px, transparent 50%);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 18px 24px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-card);
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .logo-badge {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 800;
+      box-shadow: 0 0 15px rgba(0,0,0,0.3);
+      transition: all 0.3s ease;
+    }
+
+    .logo-badge.ais {
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: #ffffff;
+      box-shadow: 0 0 20px var(--ais-glow);
+    }
+
+    .logo-badge.true {
+      background: linear-gradient(135deg, #b91c1c, #ef4444);
+      color: #ffffff;
+      box-shadow: 0 0 20px var(--true-glow);
+    }
+
+    .title-area h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .title-area p {
+      font-size: 0.825rem;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .controls-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .operator-switch {
+      display: flex;
+      background: #0f172a;
+      padding: 4px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+    }
+
+    .operator-btn {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-secondary);
+      padding: 8px 18px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.25s ease;
+    }
+
+    .operator-btn.active.ais-btn {
+      background: #10b981;
+      color: #ffffff;
+      box-shadow: 0 4px 12px var(--ais-glow);
+    }
+
+    .operator-btn.active.true-btn {
+      background: #ef4444;
+      color: #ffffff;
+      box-shadow: 0 4px 12px var(--true-glow);
+    }
+
+    .custom-select {
+      background: #0f172a;
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      padding: 9px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 0.875rem;
+      font-weight: 600;
+      outline: none;
+      cursor: pointer;
+      transition: border 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #2563eb, #3b82f6);
+      color: white;
+      border: none;
+      padding: 9px 18px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+      transition: all 0.25s ease;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(37, 99, 235, 0.45);
+    }
+
+    .btn-line {
+      background: linear-gradient(135deg, #00b900, #06c755);
+      color: white;
+      border: none;
+      padding: 9px 18px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(6, 199, 85, 0.3);
+      transition: all 0.25s ease;
+    }
+
+    .btn-line:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(6, 199, 85, 0.45);
+    }
+
+    .btn-upload {
+      background: #1e293b;
+      color: var(--text-primary);
+      border: 1px dashed #475569;
+      padding: 9px 16px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .btn-upload:hover {
+      border-color: #38bdf8;
+      color: #38bdf8;
+      background: #0f172a;
+    }
+
+    .overview-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px 24px;
+      margin-bottom: 24px;
+    }
+
+    .overview-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+
+    .overview-stats {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .stat-item {
+      text-align: right;
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .stat-value-huge {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1.1;
+      background: linear-gradient(180deg, #ffffff 40%, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      box-shadow: var(--shadow-card);
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .card:hover {
+      border-color: rgba(148, 163, 184, 0.25);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+
+    .card-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-badge {
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-weight: 600;
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .sla-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 8px;
+    }
+
+    .sla-table th {
+      text-align: left;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 6px 12px;
+    }
+
+    .sla-table td {
+      padding: 10px 12px;
+      background: rgba(15, 23, 42, 0.5);
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .sla-table tr td:first-child {
+      border-top-left-radius: var(--radius-sm);
+      border-bottom-left-radius: var(--radius-sm);
+    }
+
+    .sla-table tr td:last-child {
+      border-top-right-radius: var(--radius-sm);
+      border-bottom-right-radius: var(--radius-sm);
+      text-align: right;
+    }
+
+    .sla-status-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot-green { background: var(--status-green); box-shadow: 0 0 8px rgba(16, 185, 129, 0.5); }
+    .dot-yellow { background: var(--status-yellow); box-shadow: 0 0 8px rgba(245, 158, 11, 0.5); }
+    .dot-blue { background: var(--status-blue); box-shadow: 0 0 8px rgba(59, 130, 246, 0.5); }
+    .dot-red { background: var(--status-red); box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); }
+
+    .aging-badge {
+      font-size: 0.75rem;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: #1e293b;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+
+    .charts-container {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    .chart-wrapper {
+      position: relative;
+      height: 260px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .actions-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .action-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .action-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .action-card-header h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .action-count-pill {
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .pill-red { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .pill-blue { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+    .pill-orange { background: rgba(249, 115, 22, 0.15); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.3); }
+
+    .action-search {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      color: var(--text-primary);
+      font-size: 0.8rem;
+      outline: none;
+      margin-bottom: 12px;
+    }
+
+    .action-list {
+      max-height: 280px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 4px;
+    }
+
+    .action-list::-webkit-scrollbar {
+      width: 5px;
+    }
+    .action-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .action-list::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+
+    .action-item {
+      background: #0f172a;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .action-item:hover {
+      border-color: #475569;
+      background: #1e293b;
+    }
+
+    .action-item.over-sla {
+      border-left: 3px solid var(--status-red);
+    }
+
+    .action-item.in-sla {
+      border-left: 3px solid var(--status-blue);
+    }
+
+    .action-item.rework {
+      border-left: 3px solid var(--status-orange);
+    }
+
+    .site-duid-text {
+      font-size: 0.825rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      word-break: break-all;
+    }
+
+    .site-owner-text {
+      font-size: 0.725rem;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .action-badge {
+      font-size: 0.75rem;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .badge-red { background: #451a1a; color: #f87171; border: 1px solid #7f1d1d; }
+    .badge-blue { background: #172554; color: #93c5fd; border: 1px solid #1e3a8a; }
+    .badge-orange { background: #431407; color: #fdba74; border: 1px solid #7c2d12; }
+
+    .empty-state {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-card {
+      background: #111827;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      width: 90%;
+      max-width: 580px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      overflow: hidden;
+      animation: modalEnter 0.25s ease-out;
+    }
+
+    @keyframes modalEnter {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      background: #0f172a;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .modal-header h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .close-modal-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.25rem;
+      cursor: pointer;
+    }
+
+    .close-modal-btn:hover {
+      color: var(--text-primary);
+    }
+
+    .modal-body {
+      padding: 20px;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .form-control {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      color: var(--text-primary);
+      font-size: 0.875rem;
+      outline: none;
+    }
+
+    .form-control:focus {
+      border-color: var(--border-focus);
+    }
+
+    .message-preview-box {
+      background: #090d16;
+      border: 1px solid #1e293b;
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      font-family: monospace;
+      font-size: 0.825rem;
+      line-height: 1.5;
+      color: #38bdf8;
+      white-space: pre-wrap;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    .modal-footer {
+      padding: 14px 20px;
+      background: #0f172a;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .dropzone {
+      border: 2px dashed #334155;
+      border-radius: var(--radius-md);
+      padding: 30px 20px;
+      text-align: center;
+      cursor: pointer;
+      background: #0f172a;
+      transition: all 0.25s;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: #38bdf8;
+      background: #172554;
+    }
+
+    .dropzone-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1e293b;
+      color: #ffffff;
+      border: 1px solid #334155;
+      padding: 12px 20px;
+      border-radius: var(--radius-md);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 2000;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.3s ease;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .toast.success { border-left: 4px solid #10b981; }
+    .toast.error { border-left: 4px solid #ef4444; }
+
+    @media (max-width: 1024px) {
+      .dashboard-grid, .charts-container, .actions-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header Bar -->
+  <header class="header-container">
+    <div class="brand-section">
+      <div id="brandLogo" class="logo-badge ais">A</div>
+      <div class="title-area">
+        <h1 id="dashboardTitle">AIS INSTALLATION & SLA DASHBOARD</h1>
+        <p id="dashboardSubtitle">Executive Monitoring & Automation Platform</p>
+      </div>
+    </div>
+
+    <div class="controls-section">
+      <!-- Operator Switcher -->
+      <div class="operator-switch">
+        <button class="operator-btn active ais-btn" data-operator="AIS">🟢 AIS</button>
+        <button class="operator-btn true-btn" data-operator="TRUE">🔴 TRUE</button>
+      </div>
+
+      <!-- Year Selector -->
+      <select id="yearSelect" class="custom-select" title="เลือกปี">
+        <option value="2026" selected>2026</option>
+        <option value="2025">2025</option>
+        <option value="ทั้งหมด">ทั้งหมด</option>
+      </select>
+
+      <!-- Refresh Data Button -->
+      <button id="refreshBtn" class="btn-primary" title="รีเฟรชข้อมูลจาก Google Sheets">
+        🔄 รีเฟรช
+      </button>
+
+      <!-- Import File Button -->
+      <button id="uploadModalBtn" class="btn-upload" title="นำเข้าไฟล์ Excel (.xlsx)">
+        📁 นำเข้าไฟล์ Excel
+      </button>
+
+      <!-- Capture Image Button -->
+      <button id="captureBtn" class="btn-capture" title="แคปเจอร์รูปภาพแดชบอร์ด">
+        📸 แคปรูปภาพ
+      </button>
+
+      <!-- LINE Alert Button -->
+      <button id="lineAlertBtn" class="btn-line" title="ส่งสรุปแจ้งเตือนเข้า LINE Group (รูปภาพ + ข้อความ)">
+        📲 แจ้งเตือน LINE
+      </button>
+    </div>
+  </header>
+
+  <!-- Capture Area Wrapper for High-Res Image Snapshot -->
+  <div id="captureArea" style="padding: 4px; border-radius: var(--radius-lg);">
+    <!-- Live Status & Total Banner -->
+    <div class="overview-banner">
+      <div class="overview-left">
+        <div class="status-indicator"></div>
+        <div>
+          <strong id="updateTimestamp" style="font-size: 0.95rem;">ข้อมูลอัปเดต ณ: กำลังโหลดข้อมูล...</strong>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+            ระบบคำนวณ SLA อัตโนมัติ (Smart QC: 3 วัน | PAT Subcon: 5 วัน)
+          </p>
+        </div>
+      </div>
+
+      <div class="overview-stats">
+        <div class="stat-item">
+          <div class="stat-label">จำนวนงานติดตั้งเสร็จ <span id="yearSublabel">(ปี 2026)</span></div>
+          <div id="totalInstallCount" class="stat-value-huge">0 ไซต์</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Executive Summary Cards Grid -->
+    <div class="dashboard-grid">
+      <!-- Card 1: SMART QC (or 08.1 SmartQC+AOR) -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span style="font-size: 1.2rem;">⚡</span>
+            <span id="sqcCardTitle">EXECUTIVE SUMMARY: SMART QC</span>
+          </div>
+          <span class="card-badge">SLA: 3 วัน</span>
+        </div>
+
+        <table class="sla-table">
+          <thead>
+            <tr>
+              <th>สถานะงาน</th>
+              <th style="text-align: center;">จำนวนไซต์</th>
+              <th style="text-align: right;">Aging เฉลี่ย (วัน)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div class="sla-status-cell">
+                  <span class="dot dot-green"></span>
+                  <span>ปิดตามกำหนด (Done in SLA)</span>
+                </div>
+              </td>
+              <td id="sqcDoneInCount" style="text-align: center; color: var(--status-green);">0</td>
+              <td id="sqcDoneInAvg" style="text-align: right;"><span class="aging-badge">0.0 วัน</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="sla-status-cell">
+                  <span class="dot dot-yellow"></span>
+                  <span>ปิดงานล่าช้า (Done Late)</span>
+                </div>
+              </td>
+              <td id="sqcDoneLateCount" style="text-align: center; color: var(--status-yellow);">0</td>
+              <td id="sqcDoneLateAvg" style="text-align: right;"><span class="aging-badge">0.0 วัน</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="sla-status-cell">
+                  <span class="dot dot-blue"></span>
+                  <span>รอตรวจสอบ (Pending in SLA)</span>
+                </div>
+              </td>
+              <td id="sqcPendInCount" style="text-align: center; color: var(--status-blue);">0</td>
+              <td id="sqcPendInAvg" style="text-align: right;"><span class="aging-badge">0.0 วัน</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="sla-status-cell">
+                  <span class="dot dot-red"></span>
+                  <span style="color: #f87171;">ปิดเกินกำหนด / ค้างวิกฤต (Over SLA)</span>
+                </div>
+              </td>
+              <td id="sqcPendOverCount" style="text-align: center; color: var(--status-red); font-size: 1rem;">0</td>
+              <td id="sqcPendOverAvg" style="text-align: right;"><span class="aging-badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">0.0 วัน</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Card 2: PAT SUBCON (or 14.1 A129 PAT) -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span style="font-size: 1.2rem;">📑</span>
+            <span id="patCardTitle">EXECUTIVE SUMMARY: PAT SUBCON SUBMIT</span>
+          </div>
+          <span class="card-badge">SLA: 5 วัน</span>
+        </div>
+
+        <table class="sla-table">
+          <thead>
+            <tr>
+              <th>สถานะงาน</th>
+              <th style="text-align: center;">จำนวนไซต์</th>
+              <th style="text-align: right;">Aging เฉลี่ย (วัน)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div class="sla-status-cell">
+                  <span class="dot dot-green"></span>
+                  <span>ส่งตามกำหนด (Done in SLA)</span>
+                </div>
+              </td>
+              <td id="patDoneInCount" style="text-align: center; color: var(--status-green);">0</td>
+              <td id="patDoneInAvg" style="text-align: right;"><span class="aging-badge">0.0 วัน</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="sla-status-cell">
+                  <span class="dot dot-yellow"></span>
+                  <span>ส่งงานล่าช้า (Done Late)</span>
+                </div>
+              </td>
+              <td id="patDoneLateCount" style="text-align: center; color: var(--status-yellow);">0</td>
+              <td id="patDoneLateAvg" style="text-align: right;"><span class="aging-badge">0.0 วัน</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="sla-status-cell">
+                  <span class="dot dot-blue"></span>
+                  <span>รอส่งงาน (Pending in SLA)</span>
+                </div>
+              </td>
+              <td id="patPendInCount" style="text-align: center; color: var(--status-blue);">0</td>
+              <td id="patPendInAvg" style="text-align: right;"><span class="aging-badge">0.0 วัน</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div class="sla-status-cell">
+                  <span class="dot dot-red"></span>
+                  <span style="color: #f87171;">ปิดเกินกำหนด / ค้างวิกฤต (Over SLA)</span>
+                </div>
+              </td>
+              <td id="patPendOverCount" style="text-align: center; color: var(--status-red); font-size: 1rem;">0</td>
+              <td id="patPendOverAvg" style="text-align: right;"><span class="aging-badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">0.0 วัน</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Interactive Charts Section -->
+    <div class="charts-container">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">สัดส่วนผลงานภาพรวม 100% (Smart QC)</div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="sqcDonutChart"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">สัดส่วนผลงานภาพรวม 100% (PAT Subcon)</div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="patDonutChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Action Required & Rework Grids -->
+    <div class="actions-grid">
+      <!-- List 1: Action Required Smart QC -->
+      <div class="action-card">
+        <div class="action-card-header">
+          <h3 id="actionSqcTitle">ACTION REQUIRED: SMART QC</h3>
+          <span id="sqcCountPill" class="action-count-pill pill-red">0 ไซต์</span>
+        </div>
+        <input type="text" id="sqcSearch" class="action-search" placeholder="🔍 ค้นหา Site DUID หรือ Owner...">
+        <div id="sqcActionList" class="action-list"></div>
+      </div>
+
+      <!-- List 2: Action Required PAT Subcon -->
+      <div class="action-card">
+        <div class="action-card-header">
+          <h3 id="actionPatTitle">ACTION REQUIRED: PAT SUBCON</h3>
+          <span id="patCountPill" class="action-count-pill pill-blue">0 ไซต์</span>
+        </div>
+        <input type="text" id="patSearch" class="action-search" placeholder="🔍 ค้นหา Site DUID หรือ Assign...">
+        <div id="patActionList" class="action-list"></div>
+      </div>
+
+      <!-- List 3: Rework Required -->
+      <div class="action-card">
+        <div class="action-card-header">
+          <h3 id="actionReworkTitle">REWORK REQUIRED: PAT NOT PASS</h3>
+          <span id="reworkCountPill" class="action-count-pill pill-orange">0 ไซต์</span>
+        </div>
+        <input type="text" id="reworkSearch" class="action-search" placeholder="🔍 ค้นหา Site DUID หรือ Assign...">
+        <div id="reworkActionList" class="action-list"></div>
+      </div>
+    </div>
+  </div><!-- /captureArea -->
+
+  <!-- Modal: Import Excel File -->
+  <div id="uploadModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>📁 นำเข้าไฟล์ Excel อัปเดต SLA Dashboard</h3>
+        <button id="closeUploadModalBtn" class="close-modal-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 16px;">
+          รองรับไฟล์ Excel Export จากระบบ ISDP เช่น:
+          <br>• <code>isdp_boonchot.b_56A0S0Q_...xlsx</code> (สำหรับ <strong>AIS</strong>)
+          <br>• <code>isdp_boonchot.b_56A0UPS_...xlsx</code> (สำหรับ <strong>TRUE</strong>)
+        </p>
+
+        <div id="fileDropzone" class="dropzone">
+          <div class="dropzone-icon">📤</div>
+          <h4 style="margin-bottom: 6px;">ลากไฟล์มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</h4>
+          <p style="font-size: 0.8rem; color: var(--text-muted);">รองรับไฟล์นามสกุล .xlsx หรือ .xls</p>
+          <input type="file" id="excelFileInput" accept=".xlsx, .xls" style="display: none;">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelUploadBtn" class="btn-primary" style="background: #334155;">ยกเลิก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Send LINE Group Notification & Image Capture Preview -->
+  <div id="lineModal" class="modal-overlay">
+    <div class="modal-card" style="max-width: 720px;">
+      <div class="modal-header">
+        <h3>📲 ส่งสรุปแจ้งเตือนเข้า LINE Group (รูปภาพ + ข้อความ)</h3>
+        <button id="closeLineModalBtn" class="close-modal-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="lineNotifyToken">LINE Notify Token หรือ Webhook URL (บันทึกอัตโนมัติ)</label>
+          <input type="text" id="lineNotifyToken" class="form-control" placeholder="ใส่ LINE Notify Token หรือ Webhook URL ของกลุ่ม">
+          <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; display: block;">
+            *หากไม่มี Token สามารถกดปุ่ม <strong>"คัดลอกรูปภาพ"</strong> และ <strong>"คัดลอกข้อความ"</strong> เพื่อนำไป Paste (Ctrl+V) ใน LINE Group ได้ทันที
+          </small>
+        </div>
+
+        <!-- Captured Dashboard Image Preview -->
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label style="margin-bottom: 0;">📸 รูปภาพ Dashboard ที่แคปเจอร์:</label>
+            <div style="display: flex; gap: 8px;">
+              <button id="copyImageBtn" class="btn-secondary" style="padding: 4px 10px; font-size: 0.775rem;">
+                🖼️ คัดลอกรูปภาพ
+              </button>
+              <button id="downloadImageBtn" class="btn-secondary" style="padding: 4px 10px; font-size: 0.775rem;">
+                💾 ดาวน์โหลดรูปภาพ
+              </button>
+            </div>
+          </div>
+          <div id="imagePreviewContainer" class="image-preview-container">
+            <div id="imageLoadingSpinner" style="padding: 30px; color: var(--text-muted);">
+              ⏳ กำลังประมวลผลแคปเจอร์รูปภาพแดชบอร์ด...
+            </div>
+            <img id="capturedDashboardImg" src="" alt="Dashboard Capture Preview" style="display: none;">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>ตัวอย่างข้อความแจ้งเตือน (Message Preview):</label>
+          <div id="lineMessagePreview" class="message-preview-box"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="copyLineBtn" class="btn-primary" style="background: #1e293b; border: 1px solid #475569;">
+          📋 คัดลอกข้อความ
+        </button>
+        <button id="sendLineBtn" class="btn-line">
+          🚀 ยืนยันส่งเข้า LINE Group
+        </button>
+        <button id="cancelLineBtn" class="btn-primary" style="background: #334155;">ปิด</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Embedded Application Logic for GAS -->
+  <script src="app.js"></script>
+</body>
+</html>
