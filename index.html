@@ -1026,10 +1026,15 @@
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label for="lineNotifyToken">LINE Notify Token หรือ Webhook URL (บันทึกอัตโนมัติ)</label>
-          <input type="text" id="lineNotifyToken" class="form-control" placeholder="ใส่ LINE Notify Token หรือ Webhook URL ของกลุ่ม">
+          <label for="lineNotifyToken">LINE Channel Access Token (จากบอท SPE_SLA) หรือ Webhook URL</label>
+          <input type="text" id="lineNotifyToken" class="form-control" placeholder="ใส่ Channel Access Token ของ SPE_SLA หรือ Webhook URL">
+        </div>
+
+        <div class="form-group">
+          <label for="lineGroupId">LINE Group ID ของกลุ่ม SPE-SLA-AIS-TRUE (ถ้ามี เช่น Cxxxxxxxx)</label>
+          <input type="text" id="lineGroupId" class="form-control" placeholder="ใส่ Group ID เช่น Cxxxxxxxxxxxx (หากเว้นว่างไว้จะส่งแบบ Broadcast)">
           <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; display: block;">
-            *หากไม่มี Token สามารถกดปุ่ม <strong>"คัดลอกรูปภาพ"</strong> และ <strong>"คัดลอกข้อความ"</strong> เพื่อนำไป Paste (Ctrl+V) ใน LINE Group ได้ทันที
+            💡 <strong>วิธีที่เร็วที่สุด:</strong> กดปุ่ม <strong>"คัดลอกรูปภาพ"</strong> และ <strong>"คัดลอกข้อความ"</strong> ด้านล่าง แล้วสลับไปที่หน้าต่างแชทกลุ่ม กด Ctrl+V วางได้ทันทีเลยครับ!
           </small>
         </div>
 

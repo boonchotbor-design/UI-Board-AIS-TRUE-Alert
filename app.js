@@ -1076,9 +1076,15 @@ function generateLineAlertPreview() {
 
   document.getElementById('lineMessagePreview').textContent = msg;
 
-  // Restore saved token
+  // Restore saved token & groupId
   const tokenInput = document.getElementById('lineNotifyToken');
   if (tokenInput && state.lineToken) tokenInput.value = state.lineToken;
+
+  const groupInput = document.getElementById('lineGroupId');
+  if (groupInput) {
+    const savedGroup = localStorage.getItem('sla_line_group_id') || '';
+    if (savedGroup) groupInput.value = savedGroup;
+  }
 }
 
 // Capture High-Res Dashboard Screenshot using html2canvas
@@ -1160,23 +1166,26 @@ function handleDownloadImage() {
 async function handleSendLineAlert() {
   const tokenInput = document.getElementById('lineNotifyToken');
   const token = tokenInput ? tokenInput.value.trim() : '';
+  const groupInput = document.getElementById('lineGroupId');
+  const groupId = groupInput ? groupInput.value.trim() : '';
   const message = document.getElementById('lineMessagePreview').textContent;
   const imageBase64 = state.lastCapturedBase64 || null;
 
   if (!token) {
-    showToast('กรุณากรอก LINE Notify Token หรือ Webhook URL', 'error');
+    showToast('กรุณากรอก LINE Channel Access Token หรือ Webhook URL', 'error');
     return;
   }
 
-  // Save token for next time
+  // Save token & group for next time
   localStorage.setItem('sla_line_token', token);
   state.lineToken = token;
+  if (groupId) localStorage.setItem('sla_line_group_id', groupId);
 
   showToast('กำลังส่งแจ้งเตือน (รูปภาพ + ข้อความ) เข้า LINE Group...', 'info');
 
   // Check if running in Google Apps Script context
   if (typeof google !== 'undefined' && google.script && google.script.run) {
-    // Send via Google Apps Script with Image
+    // Send via Google Apps Script with Image & Group ID
     google.script.run
       .withSuccessHandler((res) => {
         showToast('🚀 ส่งรูปภาพและข้อความแจ้งเตือน LINE Group สำเร็จแล้ว!', 'success');
@@ -1185,8 +1194,36 @@ async function handleSendLineAlert() {
       .withFailureHandler((err) => {
         showToast(`❌ ส่ง LINE ล้มเหลว: ${err.message}`, 'error');
       })
-      .sendLineAlert(token, message, imageBase64);
+      .sendLineAlert(token, message, imageBase64, groupId);
   } else {
+    // In standalone browser mode
+    try {
+      if (token.startsWith('http://') || token.startsWith('https://')) {
+        await fetch(token, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            message: message,
+            imageBase64: imageBase64,
+            groupId: groupId
+          })
+        });
+        showToast('🚀 ส่ง Webhook แจ้งเตือนสำเร็จ!', 'success');
+        document.getElementById('lineModal').classList.remove('active');
+      } else {
+        // Direct copy as reliable local fallback
+        if (state.lastCapturedBlob) {
+          try {
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': state.lastCapturedBlob })]);
+          } catch(e) {}
+        }
+        showToast('📋 รูปภาพและข้อความพร้อมแล้ว! สามารถนำไป Paste (Ctrl+V) ใน LINE Group ได้ทันที', 'success');
+      }
+    } catch (e) {
+      showToast('📋 คัดลอกข้อความสำเร็จ! นำไปวางใน LINE Group ได้ทันที', 'success');
+    }
+  }
+}
     // In standalone browser mode
     try {
       if (token.startsWith('http://') || token.startsWith('https://')) {

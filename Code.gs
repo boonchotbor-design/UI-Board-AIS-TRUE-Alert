@@ -611,21 +611,27 @@ function saveImportData(operator, records) {
 }
 
 /**
- * ส่งแจ้งเตือนเข้า LINE ผ่าน LINE Notify Token หรือ Webhook URL (รองรับแนบรูปภาพ)
+ * ส่งแจ้งเตือนเข้า LINE ผ่าน LINE Notify Token หรือ LINE Messaging API (บอท SPE_SLA)
  */
-function sendLineAlert(token, message, imageBase64) {
+function sendLineAlert(token, message, imageBase64, groupId) {
   if (!token) throw new Error('กรุณาระบุ LINE Token หรือ Webhook URL');
   
   // บันทึก Token ล่าสุดไว้ใน User Properties
   try {
     PropertiesService.getUserProperties().setProperty('LINE_NOTIFY_TOKEN', token);
+    if (groupId) PropertiesService.getScriptProperties().setProperty('SAVED_LINE_GROUP_ID', groupId);
   } catch(e) {}
+
+  if (!groupId) {
+    groupId = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || '';
+  }
 
   if (token.indexOf('http://') === 0 || token.indexOf('https://') === 0) {
     // 1. กรณีเป็น Webhook URL
     var payload = {
       message: message,
-      imageBase64: imageBase64 || null
+      imageBase64: imageBase64 || null,
+      groupId: groupId
     };
     var options = {
       method: 'post',
@@ -636,8 +642,9 @@ function sendLineAlert(token, message, imageBase64) {
     var res = UrlFetchApp.fetch(token, options);
     return { success: true, response: res.getContentText() };
   } else if (token.length > 80) {
-    // 2. กรณีเป็น LINE Messaging API Channel Access Token (เช่น บอท SPE_SLA)
-    var url = 'https://api.line.me/v2/bot/message/broadcast';
+    // 2. กรณีเป็น LINE Messaging API Channel Access Token (บอท SPE_SLA)
+    // ถ้ารู้ groupId ให้ส่งแบบ push ตรงเข้ากลุ่ม, ถ้าไม่รู้ให้ broadcast
+    var url = groupId ? 'https://api.line.me/v2/bot/message/push' : 'https://api.line.me/v2/bot/message/broadcast';
     var payload = {
       messages: [
         {
@@ -646,6 +653,8 @@ function sendLineAlert(token, message, imageBase64) {
         }
       ]
     };
+    if (groupId) payload.to = groupId;
+
     var options = {
       method: 'post',
       contentType: 'application/json',
