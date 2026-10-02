@@ -7,6 +7,101 @@
 // ── LINE Messaging API: Channel Access Token ของบอท SPE_SLA ──
 var DEFAULT_LINE_TOKEN = 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU=';
 
+// ─────────────────────────────────────────────────────────────
+// doGet: ดึง Group ID ที่บันทึกไว้ (เรียกผ่าน Web App URL ?action=groupid)
+// ─────────────────────────────────────────────────────────────
+function doGet(e) {
+  var action = e && e.parameter && e.parameter.action ? e.parameter.action : '';
+  if (action === 'groupid') {
+    var gid = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || 'ยังไม่พบ Group ID';
+    return ContentService.createTextOutput('LINE_GROUP_ID=' + gid)
+      .setMimeType(ContentService.MimeType.TEXT);
+  }
+  // Default: open dashboard
+  try {
+    var html = HtmlService.createHtmlOutputFromFile('index')
+      .setTitle('AIS & TRUE SLA Dashboard')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    return html;
+  } catch(e2) {
+    return ContentService.createTextOutput('Dashboard OK - ' + new Date().toISOString())
+      .setMimeType(ContentService.MimeType.TEXT);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// doPost: LINE Webhook Receiver
+//   - รับ events จาก LINE เมื่อมีข้อความในกลุ่ม
+//   - บันทึก groupId อัตโนมัติ
+//   - ถ้า source.type == 'group' และข้อความมี /groupid → reply ด้วย Group ID
+//   - รองรับ saveImportData และ sendLineAlert จาก Web App frontend
+// ─────────────────────────────────────────────────────────────
+function doPost(e) {
+  try {
+    var body = JSON.parse(e.postData.contents);
+
+    // ── กรณี LINE Webhook Event ──
+    if (body.events) {
+      var events = body.events;
+      for (var i = 0; i < events.length; i++) {
+        var evt = events[i];
+        var source = evt.source || {};
+
+        // บันทึก groupId อัตโนมัติทันทีที่ Bot ได้รับ event จากกลุ่ม
+        if (source.type === 'group' && source.groupId) {
+          PropertiesService.getScriptProperties().setProperty('SAVED_LINE_GROUP_ID', source.groupId);
+          Logger.log('✅ บันทึก Group ID: ' + source.groupId);
+
+          // ถ้ามีข้อความ → reply Group ID กลับในกลุ่ม
+          if (evt.type === 'message' && evt.message && evt.message.type === 'text') {
+            var replyToken = evt.replyToken;
+            var text = evt.message.text || '';
+            if (text.toLowerCase().indexOf('/groupid') >= 0 || text.toLowerCase().indexOf('groupid') >= 0) {
+              replyLineMessage_(replyToken, '🤖 SPE_SLA Bot\n\n✅ LINE Group ID:\n' + source.groupId + '\n\nกรุณาคัดลอก ID นี้ไปกรอกในหน้า Dashboard ที่ช่อง "LINE Group ID" ครับ');
+            }
+          }
+        }
+      }
+      return ContentService.createTextOutput('OK').setMimeType(ContentService.MimeType.TEXT);
+    }
+
+    // ── กรณี API call จาก Frontend (saveImportData / sendLineAlert) ──
+    if (body.action === 'saveImportData' && body.operator && body.records) {
+      return ContentService.createTextOutput(
+        JSON.stringify(saveImportData(body.operator, body.records))
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (body.action === 'sendLineAlert' && body.token && body.message) {
+      return ContentService.createTextOutput(
+        JSON.stringify(sendLineAlert(body.token, body.message, body.imageBase64 || null, body.groupId || ''))
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+  } catch(err) {
+    Logger.log('doPost error: ' + err.message);
+  }
+  return ContentService.createTextOutput('OK').setMimeType(ContentService.MimeType.TEXT);
+}
+
+// ── ส่ง Reply Message กลับใน LINE Group ──
+function replyLineMessage_(replyToken, text) {
+  if (!replyToken) return;
+  var payload = {
+    replyToken: replyToken,
+    messages: [{ type: 'text', text: text }]
+  };
+  UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'Authorization': 'Bearer ' + DEFAULT_LINE_TOKEN },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+}
+
+
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('📊 Executive Dashboard')
