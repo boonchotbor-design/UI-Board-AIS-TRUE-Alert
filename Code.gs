@@ -113,11 +113,65 @@ function onEdit(e) {
 
 function toDateOnly_(value, tz) {
   if (!value) return null;
-  var d = value instanceof Date ? value : new Date(value);
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return null;
+    var formatted = Utilities.formatDate(value, tz, "yyyy-MM-dd");
+    var parts = formatted.split("-");
+    return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  }
+
+  // กรณีเป็นตัวเลข Excel serial date เช่น 45558
+  if (typeof value === "number" && value > 30000 && value < 60000) {
+    var dt = new Date((value - 25569) * 86400000);
+    if (!isNaN(dt.getTime())) {
+      var formatted = Utilities.formatDate(dt, tz, "yyyy-MM-dd");
+      var parts = formatted.split("-");
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+  }
+
+  var s = String(value).trim();
+  if (!s || s === "-" || s.toLowerCase() === "n/a") return null;
+
+  // ตรวจสอบกรณีเป็นตัวเลขเดี่ยวๆ ในรูป string
+  var num = Number(s);
+  if (!isNaN(num)) {
+    if (num > 30000 && num < 60000) {
+      var dt = new Date((num - 25569) * 86400000);
+      if (!isNaN(dt.getTime())) {
+        var formatted = Utilities.formatDate(dt, tz, "yyyy-MM-dd");
+        var parts = formatted.split("-");
+        return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      }
+    }
+    return null; // ตัวเลขที่ไม่ใช่ serial date (เช่น 1938, 0, 1) ให้ข้าม
+  }
+
+  // รองรับรูปแบบ DD/MM/YYYY หรือ DD-MM-YYYY
+  var m1 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (m1) {
+    var day   = parseInt(m1[1], 10);
+    var month = parseInt(m1[2], 10) - 1;
+    var year  = parseInt(m1[3], 10);
+    var dt = new Date(year, month, day);
+    if (!isNaN(dt.getTime())) return dt;
+  }
+
+  // รองรับรูปแบบ YYYY/MM/DD หรือ YYYY-MM-DD
+  var m2 = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (m2) {
+    var year  = parseInt(m2[1], 10);
+    var month = parseInt(m2[2], 10) - 1;
+    var day   = parseInt(m2[3], 10);
+    var dt = new Date(year, month, day);
+    if (!isNaN(dt.getTime())) return dt;
+  }
+
+  var d = new Date(s);
   if (isNaN(d.getTime())) return null;
   var formatted = Utilities.formatDate(d, tz, "yyyy-MM-dd");
   var parts = formatted.split("-");
-  return new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10));
+  return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
 }
 
 function colIdxToLetter_(idx) {
@@ -288,11 +342,8 @@ function createAisDashboard() {
     var today = toDateOnly_(new Date(), ssTz);
     var availableYears = {};
     for (var i = startRow; i < data.length; i++) {
-      var d = data[i][idxInstall];
-      if (d && d !== "") {
-        var dd = d instanceof Date ? d : new Date(d);
-        if (!isNaN(dd.getTime())) availableYears[dd.getFullYear()] = true;
-      }
+      var dd = toDateOnly_(data[i][idxInstall], ssTz);
+      if (dd && !isNaN(dd.getTime())) availableYears[dd.getFullYear()] = true;
     }
     var yearList = Object.keys(availableYears).sort(function(a,b){return b-a;});
     yearList.unshift("ทั้งหมด");
@@ -318,7 +369,16 @@ function createAisDashboard() {
       _calcSQC_(acc, today, installDate, smartQcDate, duidVal, ownerDoc, 3, "");
       _calcPAT_(acc, today, installDate, smartQcDate, patDate, duidVal, ownerDoc);
 
-      if (patRemark.toLowerCase().includes("not pass")) {
+      // ตรวจสอบงาน Rework / PAT Not Pass: ข้อความ remark ที่ไม่ใช่ Pass / First Time Pass
+      var remLower = patRemark.toLowerCase().trim();
+      var isNotPass = false;
+      if (remLower && remLower !== "pass" && remLower !== "first time pass" && remLower !== "n/a") {
+        isNotPass = true;
+      } else if (remLower.includes("not pass") || remLower.includes("reject") || remLower.includes("revise") || remLower.includes("fail") || remLower.includes("แก้ไข")) {
+        isNotPass = true;
+      }
+
+      if (isNotPass) {
         var od = Math.max(0, patDate ? Math.floor((today - patDate) / 86400000) : Math.floor((today - installDate) / 86400000));
         acc.listPatNotPass.push([duidVal, od + " วัน", C.ORANGE_BG, C.ORANGE_FG, ownerDoc]);
       }
@@ -377,11 +437,8 @@ function createTrueDashboard() {
     var today = toDateOnly_(new Date(), ssTz);
     var availableYears = {};
     for (var i = startRow; i < data.length; i++) {
-      var d = data[i][idxVerifyPhoto];
-      if (d && d !== "") {
-        var dd = d instanceof Date ? d : new Date(d);
-        if (!isNaN(dd.getTime())) availableYears[dd.getFullYear()] = true;
-      }
+      var dd = toDateOnly_(data[i][idxVerifyPhoto], ssTz);
+      if (dd && !isNaN(dd.getTime())) availableYears[dd.getFullYear()] = true;
     }
     var yearList = Object.keys(availableYears).sort(function(a,b){return b-a;});
     yearList.unshift("ทั้งหมด");
@@ -462,40 +519,48 @@ function _newAccumulators_() {
 }
 
 // ✅ คำนวณ Smart QC
-//    sqcDateDone = null → Pending, มีค่า → Done
-//    missingLabel = ข้อความเพิ่มเติม เช่น " ⚠️AOR"
+//    sqcDateDone = null หรือ วันที่ในอนาคต → Pending, มีค่าในอดีต/วันนี้ → Done
 function _calcSQC_(acc, today, installDate, sqcDateDone, duidVal, ownerDoc, slaDays, missingLabel) {
   var C = _colors_();
-  if (!sqcDateDone) {
+  var isDone = sqcDateDone && (sqcDateDone <= today);
+  if (!isDone) {
     var diff = Math.max(0, Math.floor((today - installDate) / 86400000));
     if (diff > slaDays) {
-      acc.pendingSQC_OverSLA++; acc.totalDays_pendingSQC_OverSLA+=diff;
-      acc.listPendingSmartQc.push([duidVal, diff+" วัน"+(missingLabel||""), C.RED_BG, C.RED_FG, ownerDoc]);
+      acc.pendingSQC_OverSLA++; acc.totalDays_pendingSQC_OverSLA += diff;
+      acc.listPendingSmartQc.push([duidVal, diff + " วัน" + (missingLabel || ""), C.RED_BG, C.RED_FG, ownerDoc]);
     } else {
-      acc.pendingSQC_InSLA++; acc.totalDays_pendingSQC_InSLA+=diff;
-      acc.listPendingSmartQc.push([duidVal, diff+" วัน"+(missingLabel||""), C.BLUE_BG, C.BLUE_FG, ownerDoc]);
+      acc.pendingSQC_InSLA++; acc.totalDays_pendingSQC_InSLA += diff;
+      acc.listPendingSmartQc.push([duidVal, diff + " วัน" + (missingLabel || ""), C.BLUE_BG, C.BLUE_FG, ownerDoc]);
     }
   } else {
     var diff = Math.max(0, Math.floor((sqcDateDone - installDate) / 86400000));
-    if (diff > slaDays) { acc.doneSQC_OverSLA++; acc.totalDays_doneSQC_OverSLA+=diff; }
-    else                { acc.doneSQC_InSLA++;   acc.totalDays_doneSQC_InSLA+=diff; }
+    if (diff > slaDays) { acc.doneSQC_OverSLA++; acc.totalDays_doneSQC_OverSLA += diff; }
+    else                { acc.doneSQC_InSLA++;   acc.totalDays_doneSQC_InSLA += diff; }
   }
 }
 
 // ✅ คำนวณ PAT
+//    patDate = null หรือ วันที่ในอนาคต (เช่น แพลนไว้ยังไม่ถึง) → Pending, มีค่าในอดีต/วันนี้ → Done
 function _calcPAT_(acc, today, installDate, smartQcDate, patDate, duidVal, ownerDoc) {
   var C = _colors_();
-  if (!patDate) {
-    if (smartQcDate) {
-      var diff = Math.max(0, Math.floor((today - smartQcDate) / 86400000));
-      if (diff > 5) { acc.pendingPat_OverSLA++; acc.totalDays_pendingPat_OverSLA+=diff; acc.listPendingPat.push([duidVal,diff+" วัน",C.RED_BG,C.RED_FG,ownerDoc]); }
-      else          { acc.pendingPat_InSLA++;   acc.totalDays_pendingPat_InSLA+=diff;   acc.listPendingPat.push([duidVal,diff+" วัน",C.BLUE_BG,C.BLUE_FG,ownerDoc]); }
+  var isDone = patDate && (patDate <= today);
+  if (!isDone) {
+    var baseDate = smartQcDate || installDate;
+    if (baseDate) {
+      var diff = Math.max(0, Math.floor((today - baseDate) / 86400000));
+      if (diff > 5) {
+        acc.pendingPat_OverSLA++; acc.totalDays_pendingPat_OverSLA += diff;
+        acc.listPendingPat.push([duidVal, diff + " วัน", C.RED_BG, C.RED_FG, ownerDoc]);
+      } else {
+        acc.pendingPat_InSLA++; acc.totalDays_pendingPat_InSLA += diff;
+        acc.listPendingPat.push([duidVal, diff + " วัน", C.BLUE_BG, C.BLUE_FG, ownerDoc]);
+      }
     }
   } else {
     var base = smartQcDate || installDate;
     var diff = Math.max(0, Math.floor((patDate - base) / 86400000));
-    if (diff > 5) { acc.donePat_OverSLA++; acc.totalDays_donePat_OverSLA+=diff; }
-    else          { acc.donePat_InSLA++;   acc.totalDays_donePat_InSLA+=diff; }
+    if (diff > 5) { acc.donePat_OverSLA++; acc.totalDays_donePat_OverSLA += diff; }
+    else          { acc.donePat_InSLA++;   acc.totalDays_donePat_InSLA += diff; }
   }
 }
 
