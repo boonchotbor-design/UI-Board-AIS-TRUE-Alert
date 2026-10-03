@@ -709,8 +709,8 @@ function _buildDashboard(dashSheet, o) {
   wListOwner(9,o.notPassTitle,    o.listPatNotPass,      "No rework required 🎉");
 
   dashSheet.setColumnWidth(1,320);dashSheet.setColumnWidth(2,90); dashSheet.setColumnWidth(3,150);
-  dashSheet.setColumnWidth(4,100);dashSheet.setColumnWidth(5,320);dashSheet.setColumnWidth(6,90);
-  dashSheet.setColumnWidth(7,150);dashSheet.setColumnWidth(8,100);dashSheet.setColumnWidth(9,300);
+  dashSheet.setColumnWidth(4,200);dashSheet.setColumnWidth(5,320);dashSheet.setColumnWidth(6,90);
+  dashSheet.setColumnWidth(7,150);dashSheet.setColumnWidth(8,200);dashSheet.setColumnWidth(9,300);
   dashSheet.setColumnWidth(10,90);dashSheet.setColumnWidth(11,150);
 
   var lastRow=lsr+2+Math.max(o.listPendingSmartQc.length,o.listPendingPat.length,o.listPatNotPass.length);
