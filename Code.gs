@@ -365,16 +365,18 @@ function createAisDashboard() {
       var smartQcDate = toDateOnly_(row[idxSmartQc], ssTz);
       var patDate     = toDateOnly_(row[idxPat],     ssTz);
       var patRemark   = row[idxPatRemark] ? String(row[idxPatRemark]).trim() : "";
+      var patStatus   = (row.length > 36 && row[36]) ? String(row[36]).trim() : "";
+
+      var remLower    = patRemark.toLowerCase().trim();
+      var statusLower = patStatus.toLowerCase().trim();
+      var isPassed    = (remLower === "pass" || remLower === "first time pass") || (statusLower === "approved" || statusLower === "closed");
 
       _calcSQC_(acc, today, installDate, smartQcDate, duidVal, ownerDoc, 3, "");
-      _calcPAT_(acc, today, installDate, smartQcDate, patDate, duidVal, ownerDoc);
+      _calcPAT_(acc, today, installDate, smartQcDate, patDate, duidVal, ownerDoc, isPassed);
 
-      // ตรวจสอบงาน Rework / PAT Not Pass: ข้อความ remark ที่ไม่ใช่ Pass / First Time Pass
-      var remLower = patRemark.toLowerCase().trim();
+      // ตรวจสอบงาน Rework / PAT Not Pass: ข้อความ remark ที่มี not pass / reject / revise / fail / แก้ไข
       var isNotPass = false;
-      if (remLower && remLower !== "pass" && remLower !== "first time pass" && remLower !== "n/a") {
-        isNotPass = true;
-      } else if (remLower.includes("not pass") || remLower.includes("reject") || remLower.includes("revise") || remLower.includes("fail") || remLower.includes("แก้ไข")) {
+      if (remLower.includes("not pass") || remLower.includes("reject") || remLower.includes("revise") || remLower.includes("fail") || remLower.includes("แก้ไข")) {
         isNotPass = true;
       }
 
@@ -474,8 +476,8 @@ function createTrueDashboard() {
       var missingLabel = (!aorDate ? " ⚠️AOR" : "") + (!smartQcDate ? " ⚠️SQC" : "");
       _calcSQC_(acc, today, installDate, sqcDone ? (smartQcDate || aorDate) : null, duidVal, ownerDoc, 3, missingLabel);
 
-      // PAT
-      _calcPAT_(acc, today, installDate, smartQcDate, patDate, duidVal, ownerDoc);
+      // PAT (TRUE sheet: ไม่มีคอลัมน์ PAT Status แยก ใช้ isPassed=false)
+      _calcPAT_(acc, today, installDate, smartQcDate, patDate, duidVal, ownerDoc, false);
 
       // Alarm Rework
       var hasAlarm = patRemark !== "" && patRemark.toLowerCase().includes("alarm") && !patRemark.toLowerCase().includes("no alarm");
@@ -552,11 +554,19 @@ function _calcSQC_(acc, today, installDate, sqcDateDone, duidVal, ownerDoc, slaD
 }
 
 // ✅ คำนวณ PAT
-//    patDate = null หรือ วันที่ในอนาคต (เช่น แพลนไว้ยังไม่ถึง) → Pending, มีค่าในอดีต/วันนี้ → Done
-function _calcPAT_(acc, today, installDate, smartQcDate, patDate, duidVal, ownerDoc) {
+//    patDate มีค่า → Done (เทียบกับ baseDate หา SLA)
+//    isPassed = true (Pass/Approved) → Done in SLA
+//    ไม่มีวันที่ และยังไม่ผ่าน → Pending (รอส่งงาน)
+function _calcPAT_(acc, today, installDate, smartQcDate, patDate, duidVal, ownerDoc, isPassed) {
   var C = _colors_();
-  var isDone = patDate && (patDate <= today);
-  if (!isDone) {
+  if (patDate) {
+    var base = smartQcDate || installDate;
+    var diff = Math.max(0, Math.floor((patDate - base) / 86400000));
+    if (diff > 5) { acc.donePat_OverSLA++; acc.totalDays_donePat_OverSLA += diff; }
+    else          { acc.donePat_InSLA++;   acc.totalDays_donePat_InSLA += diff; }
+  } else if (isPassed) {
+    acc.donePat_InSLA++;
+  } else {
     var baseDate = smartQcDate || installDate;
     if (baseDate) {
       var diff = Math.max(0, Math.floor((today - baseDate) / 86400000));
@@ -568,11 +578,6 @@ function _calcPAT_(acc, today, installDate, smartQcDate, patDate, duidVal, owner
         acc.listPendingPat.push([duidVal, diff + " วัน", C.BLUE_BG, C.BLUE_FG, ownerDoc]);
       }
     }
-  } else {
-    var base = smartQcDate || installDate;
-    var diff = Math.max(0, Math.floor((patDate - base) / 86400000));
-    if (diff > 5) { acc.donePat_OverSLA++; acc.totalDays_donePat_OverSLA += diff; }
-    else          { acc.donePat_InSLA++;   acc.totalDays_donePat_InSLA += diff; }
   }
 }
 
