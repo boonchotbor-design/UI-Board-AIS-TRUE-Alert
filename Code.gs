@@ -554,31 +554,32 @@ function _calcSQC_(acc, today, installDate, sqcDateDone, duidVal, ownerDoc, slaD
 }
 
 // ✅ คำนวณ PAT
-//    patDate มีค่า → Done (เทียบกับ baseDate หา SLA)
-//    isPassed = true (Pass/Approved) → Done in SLA
-//    ไม่มีวันที่ และยังไม่ผ่าน → Pending (รอส่งงาน)
+//    patDate มีค่า → Done
+//    isPassed = true → Done in SLA
+//    ไม่มี patDate และยังไม่ผ่าน → Pending เฉพาะเมื่อ Smart QC เสร็จแล้ว (ตาม Old Code.gs)
 function _calcPAT_(acc, today, installDate, smartQcDate, patDate, duidVal, ownerDoc, isPassed) {
   var C = _colors_();
   if (patDate) {
+    // มีวันที่ส่ง PAT แล้ว → Done
     var base = smartQcDate || installDate;
     var diff = Math.max(0, Math.floor((patDate - base) / 86400000));
     if (diff > 5) { acc.donePat_OverSLA++; acc.totalDays_donePat_OverSLA += diff; }
     else          { acc.donePat_InSLA++;   acc.totalDays_donePat_InSLA += diff; }
   } else if (isPassed) {
+    // ไม่มีวันที่ แต่ PAT Status = Approved/Closed หรือ Remark = Pass → Done
     acc.donePat_InSLA++;
-  } else {
-    var baseDate = smartQcDate || installDate;
-    if (baseDate) {
-      var diff = Math.max(0, Math.floor((today - baseDate) / 86400000));
-      if (diff > 5) {
-        acc.pendingPat_OverSLA++; acc.totalDays_pendingPat_OverSLA += diff;
-        acc.listPendingPat.push([duidVal, diff + " วัน", C.RED_BG, C.RED_FG, ownerDoc]);
-      } else {
-        acc.pendingPat_InSLA++; acc.totalDays_pendingPat_InSLA += diff;
-        acc.listPendingPat.push([duidVal, diff + " วัน", C.BLUE_BG, C.BLUE_FG, ownerDoc]);
-      }
+  } else if (smartQcDate) {
+    // SQC เสร็จแล้ว แต่ยังไม่ส่ง PAT → Pending (นับจากวันที่ SQC เสร็จ)
+    var diff = Math.max(0, Math.floor((today - smartQcDate) / 86400000));
+    if (diff > 5) {
+      acc.pendingPat_OverSLA++; acc.totalDays_pendingPat_OverSLA += diff;
+      acc.listPendingPat.push([duidVal, diff + " วัน", C.RED_BG, C.RED_FG, ownerDoc]);
+    } else {
+      acc.pendingPat_InSLA++; acc.totalDays_pendingPat_InSLA += diff;
+      acc.listPendingPat.push([duidVal, diff + " วัน", C.BLUE_BG, C.BLUE_FG, ownerDoc]);
     }
   }
+  // ถ้ายังไม่ผ่าน SQC → ยังไม่นับ PAT (รอ SQC ก่อน)
 }
 
 function _getOrCreateSheet_(ss, name) {
