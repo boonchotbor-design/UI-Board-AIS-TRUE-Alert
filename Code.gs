@@ -389,12 +389,18 @@ function createAisDashboard() {
                      " SQC=" + colIdxToLetter_(idxSmartQc) + " PAT=" + colIdxToLetter_(idxPat) +
                      " Owner=" + colIdxToLetter_(idxOwnerDoc) + " (hdr row " + (headerRowIdx + 1) + ")";
 
-    _buildDashboard(dashSheet, {
-      title: "AIS INSTALLATION & SLA DASHBOARD", selectedYear: selectedYear, yearList: yearList, totalInstall: acc.totalInstall,
-      ...acc, sqcCardLabel: "EXECUTIVE SUMMARY: SMART QC", patCardLabel: "EXECUTIVE SUMMARY: PAT SUBCON SUBMIT",
-      pendingSqcTitle: "ACTION REQUIRED: SMART QC", pendingPatTitle: "ACTION REQUIRED: PAT SUBCON",
-      notPassTitle: "REWORK REQUIRED: PAT NOT PASS", debugLine2: debugLine2, getAvg: getAvg
-    });
+    acc.title           = "AIS INSTALLATION & SLA DASHBOARD";
+    acc.selectedYear    = selectedYear;
+    acc.yearList        = yearList;
+    acc.sqcCardLabel    = "EXECUTIVE SUMMARY: SMART QC";
+    acc.patCardLabel    = "EXECUTIVE SUMMARY: PAT SUBCON SUBMIT";
+    acc.pendingSqcTitle = "ACTION REQUIRED: SMART QC";
+    acc.pendingPatTitle = "ACTION REQUIRED: PAT SUBCON";
+    acc.notPassTitle    = "REWORK REQUIRED: PAT NOT PASS";
+    acc.debugLine2      = debugLine2;
+    acc.getAvg          = getAvg;
+
+    _buildDashboard(dashSheet, acc);
   } catch(err) {
     Logger.log(err.message + "\n" + err.stack);
     SpreadsheetApp.getUi().alert("⚠️ Error:\n" + err.message);
@@ -486,12 +492,18 @@ function createTrueDashboard() {
                      " Alarm=" + colIdxToLetter_(idxPatRemark) + " Owner=" + colIdxToLetter_(idxOwnerDoc) +
                      " (hdr row " + (headerRowIdx + 1) + ")";
 
-    _buildDashboard(dashSheet, {
-      title: "TRUE INSTALLATION & SLA DASHBOARD", selectedYear: selectedYear, yearList: yearList, totalInstall: acc.totalInstall,
-      ...acc, sqcCardLabel: "EXECUTIVE SUMMARY: 08.1 SmartQC+AOR", patCardLabel: "EXECUTIVE SUMMARY: 14.1 A129 PAT Site Folder",
-      pendingSqcTitle: "ACTION REQUIRED: 08.1 SmartQC+AOR", pendingPatTitle: "ACTION REQUIRED: 14.1 A129 PAT Site Folder",
-      notPassTitle: "REWORK REQUIRED: ALARM FOUND", debugLine2: debugLine2, getAvg: getAvg
-    });
+    acc.title           = "TRUE INSTALLATION & SLA DASHBOARD";
+    acc.selectedYear    = selectedYear;
+    acc.yearList        = yearList;
+    acc.sqcCardLabel    = "EXECUTIVE SUMMARY: 08.1 SmartQC+AOR";
+    acc.patCardLabel    = "EXECUTIVE SUMMARY: 14.1 A129 PAT Site Folder";
+    acc.pendingSqcTitle = "ACTION REQUIRED: 08.1 SmartQC+AOR";
+    acc.pendingPatTitle = "ACTION REQUIRED: 14.1 A129 PAT Site Folder";
+    acc.notPassTitle    = "REWORK REQUIRED: ALARM FOUND";
+    acc.debugLine2      = debugLine2;
+    acc.getAvg          = getAvg;
+
+    _buildDashboard(dashSheet, acc);
   } catch(err) {
     Logger.log(err.message + "\n" + err.stack);
     SpreadsheetApp.getUi().alert("⚠️ Error:\n" + err.message);
@@ -658,13 +670,15 @@ function _buildDashboard(dashSheet, o) {
 
   var lsr=30;
   function wList(sc,title,list,empty){
-    dashSheet.getRange(lsr,sc,1,2).merge().setValue(title).setBackground("#1e293b").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center").setBorder(true,true,true,true,null,null,"#1e293b",SpreadsheetApp.BorderStyle.SOLID);
-    dashSheet.getRange(lsr+1,sc).setValue("Site DUID"); dashSheet.getRange(lsr+1,sc+1).setValue("Aging");
-    dashSheet.getRange(lsr+1,sc,1,2).setFontColor("#1e293b").setFontWeight("bold").setBackground("#f8fafc").setHorizontalAlignment("center").setBorder(false,true,true,true,true,false,C_BORDER,SpreadsheetApp.BorderStyle.SOLID);
+    dashSheet.getRange(lsr,sc,1,3).merge().setValue(title).setBackground("#1e293b").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center").setBorder(true,true,true,true,null,null,"#1e293b",SpreadsheetApp.BorderStyle.SOLID);
+    dashSheet.getRange(lsr+1,sc).setValue("Site DUID"); dashSheet.getRange(lsr+1,sc+1,1,2).merge().setValue("Aging");
+    dashSheet.getRange(lsr+1,sc,1,3).setFontColor("#1e293b").setFontWeight("bold").setBackground("#f8fafc").setHorizontalAlignment("center").setBorder(false,true,true,true,true,false,C_BORDER,SpreadsheetApp.BorderStyle.SOLID);
     if(list.length>0){
-      for(var k=0;k<list.length;k++) dashSheet.getRange(lsr+2+k,sc,1,2).setValues([[list[k][0],list[k][1]]]).setBackground(list[k][2]).setFontColor(list[k][3]).setFontWeight("bold").setBorder(false,true,true,true,true,false,C_BORDER,SpreadsheetApp.BorderStyle.SOLID);
-      dashSheet.getRange(lsr+2,sc+1,list.length,1).setHorizontalAlignment("center").setFontWeight("bold");
-    } else { dashSheet.getRange(lsr+2,sc,1,2).merge().setValue(empty).setBackground(C_CARD).setFontColor("#94a3b8").setFontWeight("bold").setHorizontalAlignment("center").setBorder(false,true,true,true,false,false,C_BORDER,SpreadsheetApp.BorderStyle.SOLID); }
+      for(var k=0;k<list.length;k++){
+        dashSheet.getRange(lsr+2+k,sc).setValue(list[k][0]).setBackground(list[k][2]).setFontColor(list[k][3]).setFontWeight("bold").setBorder(false,true,true,true,true,false,C_BORDER,SpreadsheetApp.BorderStyle.SOLID);
+        dashSheet.getRange(lsr+2+k,sc+1,1,2).merge().setValue(list[k][1]).setBackground(list[k][2]).setFontColor(list[k][3]).setFontWeight("bold").setHorizontalAlignment("center").setBorder(false,true,true,true,true,false,C_BORDER,SpreadsheetApp.BorderStyle.SOLID);
+      }
+    } else { dashSheet.getRange(lsr+2,sc,1,3).merge().setValue(empty).setBackground(C_CARD).setFontColor("#94a3b8").setFontWeight("bold").setHorizontalAlignment("center").setBorder(false,true,true,true,false,false,C_BORDER,SpreadsheetApp.BorderStyle.SOLID); }
   }
   function wListOwner(sc,title,list,empty){
     dashSheet.getRange(lsr,sc,1,2).merge().setValue(title).setBackground("#1e293b").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center").setBorder(true,true,true,true,null,null,"#1e293b",SpreadsheetApp.BorderStyle.SOLID);
