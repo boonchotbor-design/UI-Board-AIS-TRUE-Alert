@@ -2172,7 +2172,7 @@ function handleExcelFileUpload(file) {
 
       // If in Google Apps Script context, ask or push to Google Sheet
       if (typeof google !== 'undefined' && google.script && google.script.run) {
-        const targetSheet = detectedOp === 'AIS' ? '56A0S0Q' : '56A0UPS';
+        const targetSheet = detectedOp === 'AIS' ? 'AIS' : 'True';
         showToast(`กำลังนำเข้าข้อมูลลงชีต ${targetSheet}...`, 'info');
         google.script.run
           .withSuccessHandler((res) => {

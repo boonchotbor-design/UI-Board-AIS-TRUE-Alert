@@ -127,136 +127,138 @@ function colIdxToLetter_(idx) {
 }
 
 // ---------------------------------------------------------
-// ✅ หา TRUE column indices โดย scan ทุก cell ใน 10 แถวแรก
-//    คืน object ที่มี headerRowIdx และ index แต่ละ column
-//    พร้อม fallback จากภาพจริง (ยืนยันจาก screenshot)
+// Helper: หาแถวที่เป็น header จริง (แถวที่มีคำว่า "DU ID" หรือ "DUID")
 // ---------------------------------------------------------
-function getTrueColumnIndices_(data) {
-  var SCAN_ROWS = Math.min(10, data.length);
-
-  // สร้าง map: normalized_key -> col_index
-  // scan ทุก row เพื่อรองรับ multi-row header
-  var normMap = {}; // key = lower+no-space-dot, value = col index
-  var rawMap  = {}; // key = lower trimmed,       value = col index
-  var headerRowIdx = 2; // default: row 3 (0-based=2) จากภาพจริง
-
-  for (var r = 0; r < SCAN_ROWS; r++) {
+function findHeaderRow_(data) {
+  for (var r = 0; r < Math.min(10, data.length); r++) {
     for (var c = 0; c < data[r].length; c++) {
-      var raw = data[r][c] ? String(data[r][c]).trim() : "";
-      if (raw === "") continue;
-      var lo   = raw.toLowerCase();
-      var norm = lo.replace(/[\s.\-_\/]/g, "");
-
-      if (!rawMap[lo])   rawMap[lo]   = c;
-      if (!normMap[norm]) normMap[norm] = c;
-
-      // หา header row จาก "DU ID"
-      if (lo === "du id" || norm === "duid") headerRowIdx = r;
+      var val = data[r][c] ? String(data[r][c]).trim().toLowerCase() : "";
+      if (val === "du id" || val.replace(/\s/g, "").includes("duid")) {
+        return r;
+      }
     }
   }
-
-  // helper: ลอง keys หลายรูปแบบ คืน index แรกที่เจอ หรือ fallback
-  function pick(candidates, fallback) {
-    for (var k = 0; k < candidates.length; k++) {
-      var lo   = candidates[k].toLowerCase().trim();
-      var norm = lo.replace(/[\s.\-_\/]/g, "");
-      if (rawMap[lo]   !== undefined) return rawMap[lo];
-      if (normMap[norm] !== undefined) return normMap[norm];
-    }
-    return fallback;
-  }
-
-  // ✅ indices ยืนยันจากภาพ sheet จริง (fallback = col จากภาพ)
-  var result = {
-    headerRowIdx : headerRowIdx,
-    idxDuid      : pick(["du id","duid"],                             1),   // col B
-    idxVerifyPhoto: pick(["verify photo","verifyphoto"],              22),  // col W
-    idxAor       : pick(["aor"],                                      23),  // col X ✅
-    idxSmartQc   : pick(["08.1 smartqc","081smartqc","smartqc",
-                          "08.1smartqc","081 smartqc"],               24),  // col Y ✅
-    idxExtAlarm  : pick(["ext alarm test","extalarmtest"],            25),  // col Z
-    idxPatRemark : pick(["integration alarm category",
-                          "alarm category","integrationalarmc"],      26),  // col AA
-    idxCrossSector: pick(["cross sector verification"],               27),  // col AB
-    idxPat       : pick(["14.1 a129 pat site folder",
-                          "pat site folder","patsitef"],              28),  // col AC
-    idxOwnerDoc  : pick(["pat owner","patowner","owner doc",
-                          "ownerdoc","return x-doc","returnxdoc"],    32),  // col AG
-  };
-
-  Logger.log("=== getTrueColumnIndices_ ===");
-  for (var key in result) {
-    var idx = result[key];
-    if (key === "headerRowIdx") { Logger.log("  headerRowIdx: " + idx + " (sheet row " + (idx+1) + ")"); continue; }
-    Logger.log("  "+key+": "+idx+" ("+colIdxToLetter_(idx)+") header=["+_getHeaderLabel(data,SCAN_ROWS,idx)+"]");
-  }
-  return result;
+  return 0; // หาไม่เจอ ใช้แถวแรกเป็น fallback
 }
 
-function _getHeaderLabel(data, scanRows, colIdx) {
-  var parts = [];
-  for (var r = 0; r < scanRows; r++) {
-    var v = data[r][colIdx] ? String(data[r][colIdx]).trim() : "";
-    if (v !== "") parts.push(v);
+// ---------------------------------------------------------
+// Helper: หา index คอลัมน์จาก header โดยใช้เงื่อนไขฟังก์ชัน ถ้าไม่เจอใช้ fallback
+// ---------------------------------------------------------
+function findColIndex_(headerRow, matchFn, fallbackIndex) {
+  if (!headerRow) return fallbackIndex;
+  for (var c = 0; c < headerRow.length; c++) {
+    var val = headerRow[c] ? String(headerRow[c]).trim().toLowerCase() : "";
+    if (matchFn(val)) return c;
   }
-  return parts.join(" / ");
+  return fallbackIndex;
+}
+
+// ---------------------------------------------------------
+// ✅ AIS column indices: อิงตาม Old Code.gs เป็นหลัก (AE=30, AF=31, AH=33, AJ=35, AL=37)
+// ---------------------------------------------------------
+function getAisColumnIndices_(data) {
+  var headerRowIdx = findHeaderRow_(data);
+  var headers = data[headerRowIdx] || [];
+
+  // โครงสร้างชีต AIS ตาม Old Code.gs (คอลัมน์ >= 38)
+  if (headers.length >= 38) {
+    var idxDuid = findColIndex_(headers, function(v) {
+      return v === "du id" || v.replace(/\s/g, "").includes("duid");
+    }, 0);
+
+    return {
+      headerRowIdx : headerRowIdx,
+      idxDuid      : idxDuid,
+      idxInstall   : 30, // Col AE - วันที่ติดตั้งเสร็จ
+      idxSmartQc   : 31, // Col AF - Smart QC
+      idxPat       : 33, // Col AH - PAT Subcon
+      idxPatRemark : 35, // Col AJ - PAT Remark
+      idxOwnerDoc  : 37  // Col AL - Owner Doc
+    };
+  } else {
+    // กรณีชีตรูปแบบย่อ (เช่น 17 คอลัมน์ ISDP)
+    var idxDuid = findColIndex_(headers, function(v) {
+      return v === "du id" || v.replace(/\s/g, "").includes("duid");
+    }, 0);
+    var idxInstall = findColIndex_(headers, function(v) {
+      return v.includes("actual start") || v.includes("actual end");
+    }, 7);
+    var idxSmartQc = findColIndex_(headers, function(v) {
+      return v.includes("close time") || v.includes("smartqc");
+    }, 12);
+    var idxPat = findColIndex_(headers, function(v) {
+      return v.includes("delivery attachment upload") || v.includes("attachment upload") || v.includes("pat date");
+    }, 14);
+    var idxOwnerDoc = findColIndex_(headers, function(v) {
+      return v === "owner" || v.includes("owner");
+    }, 9);
+    var idxPatRemark = findColIndex_(headers, function(v) {
+      return v === "remarks" || v.includes("remark");
+    }, 16);
+
+    return {
+      headerRowIdx : headerRowIdx,
+      idxDuid      : idxDuid,
+      idxInstall   : idxInstall,
+      idxSmartQc   : idxSmartQc,
+      idxPat       : idxPat,
+      idxPatRemark : idxPatRemark,
+      idxOwnerDoc  : idxOwnerDoc
+    };
+  }
+}
+
+// ---------------------------------------------------------
+// ✅ TRUE column indices: อิงตาม Old Code.gs (B=1, W=22, X=23, Y=24, AA=26, AC=28, AG=32)
+// ---------------------------------------------------------
+function getTrueColumnIndices_(data) {
+  var headerRowIdx = findHeaderRow_(data);
+  var headers = data[headerRowIdx] || [];
+
+  var idxDuid = findColIndex_(headers, function(v) {
+    return v === "du id" || v.replace(/\s/g, "").includes("duid");
+  }, 1);
+
+  var idxVerifyPhoto = findColIndex_(headers, function(v) {
+    return v === "verify photo" || v.includes("verify photo");
+  }, 22);
+
+  var idxAor = findColIndex_(headers, function(v) {
+    return v === "aor" || v.includes("aor");
+  }, 23);
+
+  var idxSmartQc = findColIndex_(headers, function(v) {
+    return v.replace(/\s/g, "").includes("smartqc");
+  }, 24);
+
+  var idxPatRemark = findColIndex_(headers, function(v) {
+    return v.includes("alarm category");
+  }, 26);
+
+  var idxPat = findColIndex_(headers, function(v) {
+    return v.includes("pat site folder") && v.indexOf("power") === -1;
+  }, 28);
+
+  var idxOwnerDoc = findColIndex_(headers, function(v) {
+    return v.includes("owner") || v.includes("pat owner");
+  }, 32);
+
+  return {
+    headerRowIdx  : headerRowIdx,
+    idxDuid       : idxDuid,
+    idxVerifyPhoto: idxVerifyPhoto,
+    idxAor        : idxAor,
+    idxSmartQc    : idxSmartQc,
+    idxPatRemark  : idxPatRemark,
+    idxPat        : idxPat,
+    idxOwnerDoc   : idxOwnerDoc
+  };
 }
 
 // ---------------------------------------------------------
 // 3. AIS Dashboard
-// ✅ ดึงจากชีต AIS โดยตรง + scan header อัตโนมัติ
+// ✅ ดึงจากชีต AIS โดยตรง อิงตามการทำงานของ Old Code.gs
 // ---------------------------------------------------------
-function getAisColumnIndices_(data) {
-  var SCAN_ROWS = Math.min(5, data.length);
-  var normMap = {};
-  var rawMap  = {};
-  var headerRowIdx = 0;
-
-  for (var r = 0; r < SCAN_ROWS; r++) {
-    for (var c = 0; c < data[r].length; c++) {
-      var raw = data[r][c] ? String(data[r][c]).trim() : "";
-      if (raw === "") continue;
-      var lo   = raw.toLowerCase();
-      var norm = lo.replace(/[\s.\-_\/]/g, "");
-      if (!rawMap[lo])    rawMap[lo]   = c;
-      if (!normMap[norm]) normMap[norm] = c;
-      if (lo === "du id" || norm === "duid") headerRowIdx = r;
-    }
-  }
-
-  function pick(candidates, fallback) {
-    for (var k = 0; k < candidates.length; k++) {
-      var lo   = candidates[k].toLowerCase().trim();
-      var norm = lo.replace(/[\s.\-_\/]/g, "");
-      if (rawMap[lo]    !== undefined) return rawMap[lo];
-      if (normMap[norm] !== undefined) return normMap[norm];
-    }
-    return fallback;
-  }
-
-  var result = {
-    headerRowIdx : headerRowIdx,
-    idxDuid      : pick(["du id","duid"],                                        0),
-    idxInstall   : pick(["actual start date","actualstartdate","actual start",
-                         "plan start date","planstartdate","install date"],       7),
-    idxSmartQc   : pick(["close time","closetime","close date","closedate",
-                         "smartqc","smart qc","activity state","activitystate"], 11),
-    idxPat       : pick(["delivery attachment required","deliveryattachmentrequired",
-                         "delivery attachment","pat date","patdate"],            13),
-    idxOwnerDoc  : pick(["owner","owner engineering","ownerengineering",
-                         "approve state","approvestate"],                         9),
-    idxPatRemark : pick(["activity status","activitystatus","pat remark",
-                         "patremark","remark","remarks"],                        10)
-  };
-
-  Logger.log("=== getAisColumnIndices_ ===");
-  for (var key in result) {
-    if (key === "headerRowIdx") { Logger.log("  headerRowIdx: " + result[key]); continue; }
-    Logger.log("  " + key + ": " + result[key] + " (" + colIdxToLetter_(result[key]) + ") header=[" + _getHeaderLabel(data, SCAN_ROWS, result[key]) + "]");
-  }
-  return result;
-}
-
 function createAisDashboard() {
   var lock = LockService.getScriptLock();
   try { lock.waitLock(30000); }
@@ -273,7 +275,6 @@ function createAisDashboard() {
     var data = sourceSheet.getDataRange().getValues();
     if (!data || data.length <= 1) return;
 
-    // ✅ scan header อัตโนมัติ
     var idx          = getAisColumnIndices_(data);
     var headerRowIdx = idx.headerRowIdx;
     var idxDuid      = idx.idxDuid;
@@ -288,18 +289,26 @@ function createAisDashboard() {
     var availableYears = {};
     for (var i = startRow; i < data.length; i++) {
       var d = data[i][idxInstall];
-      if (d && d !== "") { var dd = d instanceof Date ? d : new Date(d); if (!isNaN(dd.getTime())) availableYears[dd.getFullYear()] = true; }
+      if (d && d !== "") {
+        var dd = d instanceof Date ? d : new Date(d);
+        if (!isNaN(dd.getTime())) availableYears[dd.getFullYear()] = true;
+      }
     }
-    var yearList = Object.keys(availableYears).sort(function(a,b){return b-a;}); yearList.unshift("ทั้งหมด");
+    var yearList = Object.keys(availableYears).sort(function(a,b){return b-a;});
+    yearList.unshift("ทั้งหมด");
 
     var acc = _newAccumulators_();
     var C   = _colors_();
 
     for (var i = startRow; i < data.length; i++) {
       var row = data[i];
-      var installDate = toDateOnly_(row[idxInstall], ssTz); if (!installDate) continue;
+      if (row.length <= idxPatRemark) continue;
+
+      var installDate = toDateOnly_(row[idxInstall], ssTz);
+      if (!installDate) continue;
       if (selectedYear !== "ทั้งหมด" && installDate.getFullYear().toString() !== selectedYear) continue;
       acc.totalInstall++;
+
       var duidVal    = row[idxDuid]     ? String(row[idxDuid]).trim()     : "ไม่ระบุ DUID";
       var ownerDoc   = row[idxOwnerDoc] ? String(row[idxOwnerDoc]).trim() : "-";
       var smartQcDate = toDateOnly_(row[idxSmartQc], ssTz);
@@ -308,28 +317,35 @@ function createAisDashboard() {
 
       _calcSQC_(acc, today, installDate, smartQcDate, duidVal, ownerDoc, 3, "");
       _calcPAT_(acc, today, installDate, smartQcDate, patDate, duidVal, ownerDoc);
+
       if (patRemark.toLowerCase().includes("not pass")) {
-        var od = Math.max(0, patDate ? Math.floor((today-patDate)/86400000) : Math.floor((today-installDate)/86400000));
-        acc.listPatNotPass.push([duidVal, od+" วัน", C.ORANGE_BG, C.ORANGE_FG, ownerDoc]);
+        var od = Math.max(0, patDate ? Math.floor((today - patDate) / 86400000) : Math.floor((today - installDate) / 86400000));
+        acc.listPatNotPass.push([duidVal, od + " วัน", C.ORANGE_BG, C.ORANGE_FG, ownerDoc]);
       }
     }
 
     function getAvg(t,c){return c>0?(t/c).toFixed(1):"0.0";}
-    _buildDashboard(dashSheet,{
-      title:"AIS INSTALLATION & SLA DASHBOARD", selectedYear, yearList, totalInstall:acc.totalInstall,
-      ...acc, sqcCardLabel:"EXECUTIVE SUMMARY: SMART QC", patCardLabel:"EXECUTIVE SUMMARY: PAT SUBCON SUBMIT",
-      pendingSqcTitle:"ACTION REQUIRED: SMART QC", pendingPatTitle:"ACTION REQUIRED: PAT SUBCON",
-      notPassTitle:"REWORK REQUIRED: PAT NOT PASS",
-      debugLine2:" | Install="+colIdxToLetter_(idxInstall)+" SQC="+colIdxToLetter_(idxSmartQc)+" PAT="+colIdxToLetter_(idxPat)+" Owner="+colIdxToLetter_(idxOwnerDoc)+" (hdr row "+(headerRowIdx+1)+")",
-      getAvg
+    var debugLine2 = " | Install=" + colIdxToLetter_(idxInstall) +
+                     " SQC=" + colIdxToLetter_(idxSmartQc) + " PAT=" + colIdxToLetter_(idxPat) +
+                     " Owner=" + colIdxToLetter_(idxOwnerDoc) + " (hdr row " + (headerRowIdx + 1) + ")";
+
+    _buildDashboard(dashSheet, {
+      title: "AIS INSTALLATION & SLA DASHBOARD", selectedYear: selectedYear, yearList: yearList, totalInstall: acc.totalInstall,
+      ...acc, sqcCardLabel: "EXECUTIVE SUMMARY: SMART QC", patCardLabel: "EXECUTIVE SUMMARY: PAT SUBCON SUBMIT",
+      pendingSqcTitle: "ACTION REQUIRED: SMART QC", pendingPatTitle: "ACTION REQUIRED: PAT SUBCON",
+      notPassTitle: "REWORK REQUIRED: PAT NOT PASS", debugLine2: debugLine2, getAvg: getAvg
     });
-  } catch(err){Logger.log(err.message+"\n"+err.stack);SpreadsheetApp.getUi().alert("⚠️ Error:\n"+err.message);}
-  finally{lock.releaseLock();}
+  } catch(err) {
+    Logger.log(err.message + "\n" + err.stack);
+    SpreadsheetApp.getUi().alert("⚠️ Error:\n" + err.message);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ---------------------------------------------------------
 // 4. TRUE Dashboard
-// ✅ ดึงจากชีต True โดยตรง + scan header (getTrueColumnIndices_)
+// ✅ ดึงจากชีต True โดยตรง อิงตามการทำงานของ Old Code.gs
 // ---------------------------------------------------------
 function createTrueDashboard() {
   var lock = LockService.getScriptLock();
@@ -347,100 +363,84 @@ function createTrueDashboard() {
     var data = sourceSheet.getDataRange().getValues();
     if (!data || data.length <= 1) return;
 
-    var sheetName = sourceSheet.getName();
-    var is56A0UPS = (sheetName === "56A0UPS") || (data[0] && data[0].length > 60);
-
-    var startRow = 1;
-    var idxDuid, idxVerifyPhoto, idxAor, idxSmartQc, idxPat, idxPatRemark, idxOwnerDoc;
-
-    if (is56A0UPS) {
-      idxDuid        = 0;  // Col A
-      idxVerifyPhoto = 66; // Col BO (Verify Photo Actual End Date)
-      idxSmartQc     = 36; // Col AK (08.1 SmartQC Actual End Date)
-      idxAor         = 40; // Col AO (AOR Actual End Date)
-      idxPatRemark   = 44; // Col AS (Integration alarm category)
-      idxPat         = 46; // Col AU (14.1 A129 PAT Site Folder Actual End Date)
-      idxOwnerDoc    = 47; // Col AV (PAT Owner)
-      startRow       = 2;  // ข้าม header row 1 และ subtotal row 2
-    } else {
-      var idx = getTrueColumnIndices_(data);
-      startRow       = idx.headerRowIdx + 1;
-      idxDuid        = idx.idxDuid;
-      idxVerifyPhoto = idx.idxVerifyPhoto;
-      idxAor         = idx.idxAor;
-      idxSmartQc     = idx.idxSmartQc;
-      idxPat         = idx.idxPat;
-      idxPatRemark   = idx.idxPatRemark;
-      idxOwnerDoc    = idx.idxOwnerDoc;
-    }
+    var idx            = getTrueColumnIndices_(data);
+    var headerRowIdx   = idx.headerRowIdx;
+    var idxDuid        = idx.idxDuid;
+    var idxVerifyPhoto = idx.idxVerifyPhoto;
+    var idxAor         = idx.idxAor;
+    var idxSmartQc     = idx.idxSmartQc;
+    var idxPat         = idx.idxPat;
+    var idxPatRemark   = idx.idxPatRemark;
+    var idxOwnerDoc    = idx.idxOwnerDoc;
+    var startRow       = headerRowIdx + 1;
 
     var today = toDateOnly_(new Date(), ssTz);
-    var availableYears={};
-    for (var i=startRow;i<data.length;i++) {
-      var d=data[i][idxVerifyPhoto];
-      if(d&&d!==""){var dd=d instanceof Date?d:new Date(d);if(!isNaN(dd.getTime()))availableYears[dd.getFullYear()]=true;}
+    var availableYears = {};
+    for (var i = startRow; i < data.length; i++) {
+      var d = data[i][idxVerifyPhoto];
+      if (d && d !== "") {
+        var dd = d instanceof Date ? d : new Date(d);
+        if (!isNaN(dd.getTime())) availableYears[dd.getFullYear()] = true;
+      }
     }
-    var yearList=Object.keys(availableYears).sort(function(a,b){return b-a;});yearList.unshift("ทั้งหมด");
+    var yearList = Object.keys(availableYears).sort(function(a,b){return b-a;});
+    yearList.unshift("ทั้งหมด");
 
     var acc = _newAccumulators_();
-    var C = _colors_();
+    var C   = _colors_();
 
-    for (var i=startRow;i<data.length;i++) {
-      var row=data[i];
-      var installDate=toDateOnly_(row[idxVerifyPhoto],ssTz); if(!installDate) continue;
-      if(selectedYear!=="ทั้งหมด"&&installDate.getFullYear().toString()!==selectedYear) continue;
+    for (var i = startRow; i < data.length; i++) {
+      var row = data[i];
+      if (row.length <= idxPatRemark) continue;
+
+      var installDate = toDateOnly_(row[idxVerifyPhoto], ssTz);
+      if (!installDate) continue;
+      if (selectedYear !== "ทั้งหมด" && installDate.getFullYear().toString() !== selectedYear) continue;
       acc.totalInstall++;
 
-      var duidVal   =row[idxDuid]     ?String(row[idxDuid]).trim()    :"ไม่ระบุ DUID";
-      var ownerDoc  =row[idxOwnerDoc] ?String(row[idxOwnerDoc]).trim():"-";
-      var patRemark =row[idxPatRemark]?String(row[idxPatRemark]).trim():"";
+      var duidVal   = row[idxDuid]      ? String(row[idxDuid]).trim()     : "ไม่ระบุ DUID";
+      var ownerDoc  = row[idxOwnerDoc]  ? String(row[idxOwnerDoc]).trim() : "-";
+      var patRemark = row[idxPatRemark] ? String(row[idxPatRemark]).trim(): "";
 
-      // ✅ แปลงวันที่ทั้ง 2 milestone
-      var aorDate     = toDateOnly_(row[idxAor],      ssTz);
-      var smartQcDate = toDateOnly_(row[idxSmartQc],  ssTz);
-      var patDate     = toDateOnly_(row[idxPat],      ssTz);
+      var aorDate     = toDateOnly_(row[idxAor],     ssTz);
+      var smartQcDate = toDateOnly_(row[idxSmartQc], ssTz);
+      var patDate     = toDateOnly_(row[idxPat],     ssTz);
 
-      // ✅ Debug log เฉพาะ RYG0757_Flash_battery
-      if (duidVal.toLowerCase().includes("ryg0757_flash_battery")) {
-        Logger.log("=== DEBUG RYG0757_Flash_battery (sheet row "+(i+1)+") ===");
-        Logger.log("  VerifyPhoto["+idxVerifyPhoto+"]("+colIdxToLetter_(idxVerifyPhoto)+"): "+installDate+" raw=["+row[idxVerifyPhoto]+"]");
-        Logger.log("  AOR["+idxAor+"]("+colIdxToLetter_(idxAor)+"): "+aorDate+" raw=["+row[idxAor]+"] type="+typeof row[idxAor]);
-        Logger.log("  SmartQC["+idxSmartQc+"]("+colIdxToLetter_(idxSmartQc)+"): "+smartQcDate+" raw=["+row[idxSmartQc]+"] type="+typeof row[idxSmartQc]);
-        Logger.log("  sqcDone: "+(aorDate&&smartQcDate?"YES ✅":"NO ❌ missing="+((!aorDate?"AOR ":"")+(!smartQcDate?"SmartQC":""))));
-        // dump raw values col 20-30
-        for(var cc=20;cc<=30;cc++) Logger.log("    raw col["+cc+"]("+colIdxToLetter_(cc)+"): ["+row[cc]+"] type="+typeof row[cc]);
-      }
-
-      // ✅ Smart QC: Done = ต้องมีทั้ง AOR และ SmartQC
-      var sqcDone = aorDate && smartQcDate;
-      var missingLabel = (!aorDate?" ⚠️AOR":"")+(!smartQcDate?" ⚠️SQC":"");
-      _calcSQC_(acc, today, installDate, sqcDone?smartQcDate:null, duidVal, ownerDoc, 3, missingLabel);
+      // Smart QC: ถ้ามี AOR ให้เช็คทั้งคู่ หรือถ้าไม่มี AOR ให้เช็ค SmartQC
+      var sqcDone = (idxAor !== undefined && row[idxAor] !== undefined && row[idxAor] !== "") ? (aorDate && smartQcDate) : !!smartQcDate;
+      var missingLabel = (!aorDate ? " ⚠️AOR" : "") + (!smartQcDate ? " ⚠️SQC" : "");
+      _calcSQC_(acc, today, installDate, sqcDone ? (smartQcDate || aorDate) : null, duidVal, ownerDoc, 3, missingLabel);
 
       // PAT
       _calcPAT_(acc, today, installDate, smartQcDate, patDate, duidVal, ownerDoc);
 
-      // Alarm Rework: มีค่าและไม่ใช่ "no alarm"
-      var hasAlarm = patRemark!=="" && !patRemark.toLowerCase().includes("no alarm");
+      // Alarm Rework
+      var hasAlarm = patRemark !== "" && patRemark.toLowerCase().includes("alarm") && !patRemark.toLowerCase().includes("no alarm");
       if (hasAlarm) {
-        var od=Math.max(0,patDate?Math.floor((today-patDate)/86400000):Math.floor((today-installDate)/86400000));
-        acc.listPatNotPass.push([duidVal,od+" วัน",C.ORANGE_BG,C.ORANGE_FG,ownerDoc]);
+        var od = Math.max(0, patDate ? Math.floor((today - patDate) / 86400000) : Math.floor((today - installDate) / 86400000));
+        acc.listPatNotPass.push([duidVal, od + " วัน", C.ORANGE_BG, C.ORANGE_FG, ownerDoc]);
       }
     }
 
     function getAvg(t,c){return c>0?(t/c).toFixed(1):"0.0";}
-    var debugLine2=" | VP="+colIdxToLetter_(idxVerifyPhoto)+" AOR="+colIdxToLetter_(idxAor)+
-                   " SQC="+colIdxToLetter_(idxSmartQc)+" PAT="+colIdxToLetter_(idxPat)+
-                   " Alarm="+colIdxToLetter_(idxPatRemark)+" Owner="+colIdxToLetter_(idxOwnerDoc)+
-                   " (hdr row "+(headerRowIdx+1)+")";
+    var debugLine2 = " | VP=" + colIdxToLetter_(idxVerifyPhoto) +
+                     (idxAor !== undefined ? " AOR=" + colIdxToLetter_(idxAor) : "") +
+                     " SQC=" + colIdxToLetter_(idxSmartQc) + " PAT=" + colIdxToLetter_(idxPat) +
+                     " Alarm=" + colIdxToLetter_(idxPatRemark) + " Owner=" + colIdxToLetter_(idxOwnerDoc) +
+                     " (hdr row " + (headerRowIdx + 1) + ")";
 
-    _buildDashboard(dashSheet,{
-      title:"TRUE INSTALLATION & SLA DASHBOARD", selectedYear, yearList, totalInstall:acc.totalInstall,
-      ...acc, sqcCardLabel:"EXECUTIVE SUMMARY: 08.1 SmartQC+AOR", patCardLabel:"EXECUTIVE SUMMARY: 14.1 A129 PAT Site Folder",
-      pendingSqcTitle:"ACTION REQUIRED: 08.1 SmartQC+AOR", pendingPatTitle:"ACTION REQUIRED: 14.1 A129 PAT Site Folder",
-      notPassTitle:"REWORK REQUIRED: ALARM FOUND", debugLine2, getAvg
+    _buildDashboard(dashSheet, {
+      title: "TRUE INSTALLATION & SLA DASHBOARD", selectedYear: selectedYear, yearList: yearList, totalInstall: acc.totalInstall,
+      ...acc, sqcCardLabel: "EXECUTIVE SUMMARY: 08.1 SmartQC+AOR", patCardLabel: "EXECUTIVE SUMMARY: 14.1 A129 PAT Site Folder",
+      pendingSqcTitle: "ACTION REQUIRED: 08.1 SmartQC+AOR", pendingPatTitle: "ACTION REQUIRED: 14.1 A129 PAT Site Folder",
+      notPassTitle: "REWORK REQUIRED: ALARM FOUND", debugLine2: debugLine2, getAvg: getAvg
     });
-  } catch(err){Logger.log(err.message+"\n"+err.stack);SpreadsheetApp.getUi().alert("⚠️ Error:\n"+err.message);}
-  finally{lock.releaseLock();}
+  } catch(err) {
+    Logger.log(err.message + "\n" + err.stack);
+    SpreadsheetApp.getUi().alert("⚠️ Error:\n" + err.message);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ---------------------------------------------------------
@@ -686,8 +686,8 @@ function saveImportData(operator, records) {
   if (!records || records.length === 0) return { success: false, message: 'ไม่มีข้อมูลนำเข้า' };
   
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheetName = (operator === 'AIS') ? '56A0S0Q' : '56A0UPS';
-  var sheet = ss.getSheetByName(sheetName) || ss.getSheetByName(operator === 'AIS' ? 'AIS' : 'True');
+  var sheetName = (operator === 'AIS') ? 'AIS' : 'True';
+  var sheet = ss.getSheetByName(sheetName) || ss.getSheetByName(operator === 'AIS' ? '56A0S0Q' : '56A0UPS');
   if (!sheet) return { success: false, message: 'ไม่พบชีต: ' + sheetName };
   var activeSheetName = sheet.getName();
   var isNewFormat = (activeSheetName === '56A0S0Q' || activeSheetName === '56A0UPS');
