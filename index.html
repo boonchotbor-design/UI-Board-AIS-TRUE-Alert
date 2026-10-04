@@ -1159,6 +1159,37 @@ C3ade9979ac5d2b606210a02797b861b3</textarea>
 // LINE Messaging API base URL
 const LINE_API = 'https://api.line.me/v2/bot/message';
 
+// Safe localStorage wrapper — prevents crash in GAS Modal Dialog (no localStorage)
+function safeGet(key, fallback) {
+  try { return localStorage.getItem(key) || fallback; } catch(e) { return fallback; }
+}
+function safeSet(key, val) {
+  try { localStorage.setItem(key, val); } catch(e) {}
+}
+
+// Must declare DEFAULT before getCleanGroupIds_ is called
+const DEFAULT_LINE_GROUP_IDS = 'C9d136fee255c27308ede4164cad0e27d\nC42aae0c059a87a75d1b8166953108d70\nC3ade9979ac5d2b606210a02797b861b3';
+
+function getCleanGroupIds_() {
+  let val = safeGet('sla_line_group_id', '');
+  val = val.replace(/C98c9b3012aa5f9dabe444276909f33d6/g, 'C42aae0c059a87a75d1b8166953108d70').trim();
+  if (!val || val === 'C9d136fee255c27308ede4164cad0e27d') {
+    val = DEFAULT_LINE_GROUP_IDS;
+  } else {
+    if (!val.includes('C42aae0c059a87a75d1b8166953108d70')) {
+      val += '\nC42aae0c059a87a75d1b8166953108d70';
+    }
+    if (!val.includes('C3ade9979ac5d2b606210a02797b861b3')) {
+      val += '\nC3ade9979ac5d2b606210a02797b861b3';
+    }
+    if (!val.includes('C9d136fee255c27308ede4164cad0e27d')) {
+      val = 'C9d136fee255c27308ede4164cad0e27d\n' + val;
+    }
+  }
+  safeSet('sla_line_group_id', val);
+  return val;
+}
+
 // State Management
 const state = {
   operator: 'AIS', // 'AIS' | 'TRUE'
@@ -1183,33 +1214,11 @@ const state = {
     pat: '',
     rework: ''
   },
-  lineToken: localStorage.getItem('sla_line_token') || 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU=',
+  lineToken: safeGet('sla_line_token', 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU='),
   lineGroupId: getCleanGroupIds_(),
-  lineWebhook: localStorage.getItem('sla_line_webhook') || 'https://webhook.site/d43cd402-b87b-4c7f-a8a8-8e58b0cc27ba',
-  gasWebAppUrl: localStorage.getItem('sla_gas_url') || 'https://script.google.com/macros/s/AKfycbysOK_GAlsnJ12VOLUUm-0qDltWipjba_JKYc2gdzE9M50FaGQ5O-R8gPiqEQK0LopsQQ/exec'
+  lineWebhook: safeGet('sla_line_webhook', 'https://webhook.site/d43cd402-b87b-4c7f-a8a8-8e58b0cc27ba'),
+  gasWebAppUrl: safeGet('sla_gas_url', 'https://script.google.com/macros/s/AKfycbysOK_GAlsnJ12VOLUUm-0qDltWipjba_JKYc2gdzE9M50FaGQ5O-R8gPiqEQK0LopsQQ/exec')
 };
-
-const DEFAULT_LINE_GROUP_IDS = 'C9d136fee255c27308ede4164cad0e27d\nC42aae0c059a87a75d1b8166953108d70\nC3ade9979ac5d2b606210a02797b861b3';
-
-function getCleanGroupIds_() {
-  let val = localStorage.getItem('sla_line_group_id') || '';
-  val = val.replace(/C98c9b3012aa5f9dabe444276909f33d6/g, 'C42aae0c059a87a75d1b8166953108d70').trim();
-  if (!val || val === 'C9d136fee255c27308ede4164cad0e27d') {
-    val = DEFAULT_LINE_GROUP_IDS;
-  } else {
-    if (!val.includes('C42aae0c059a87a75d1b8166953108d70')) {
-      val += '\nC42aae0c059a87a75d1b8166953108d70';
-    }
-    if (!val.includes('C3ade9979ac5d2b606210a02797b861b3')) {
-      val += '\nC3ade9979ac5d2b606210a02797b861b3';
-    }
-    if (!val.includes('C9d136fee255c27308ede4164cad0e27d')) {
-      val = 'C9d136fee255c27308ede4164cad0e27d\n' + val;
-    }
-  }
-  try { localStorage.setItem('sla_line_group_id', val); } catch(e) {}
-  return val;
-}
 
 // Colors matching dashboard
 const COLORS = {
@@ -1330,7 +1339,7 @@ function initUIEventListeners() {
   const resetGroupIdsBtn = document.getElementById('resetGroupIdsBtn');
   if (resetGroupIdsBtn) {
     resetGroupIdsBtn.addEventListener('click', () => {
-      localStorage.setItem('sla_line_group_id', DEFAULT_LINE_GROUP_IDS);
+      safeSet('sla_line_group_id', DEFAULT_LINE_GROUP_IDS);
       state.lineGroupId = DEFAULT_LINE_GROUP_IDS;
       const groupInput = document.getElementById('lineGroupId');
       if (groupInput) groupInput.value = DEFAULT_LINE_GROUP_IDS;
@@ -2451,7 +2460,7 @@ function generateLineAlertPreview() {
   const tokenInput = document.getElementById('lineNotifyToken');
   if (tokenInput) {
     // Use saved token from localStorage, fall back to default state token
-    tokenInput.value = localStorage.getItem('sla_line_token') || state.lineToken;
+    tokenInput.value = safeGet('sla_line_token', state.lineToken);
   }
 
   const groupInput = document.getElementById('lineGroupId');
@@ -2462,7 +2471,7 @@ function generateLineAlertPreview() {
 
   const gasInput = document.getElementById('gasWebAppUrl');
   if (gasInput) {
-    const savedGasUrl = localStorage.getItem('sla_gas_url') || state.gasWebAppUrl;
+    const savedGasUrl = safeGet('sla_gas_url', state.gasWebAppUrl);
     if (savedGasUrl) gasInput.value = savedGasUrl;
   }
 }
@@ -2561,13 +2570,13 @@ async function handleSendLineAlert() {
   }
 
   // Save token & group for next time
-  localStorage.setItem('sla_line_token', token);
+  safeSet('sla_line_token', token);
   state.lineToken = token;
-  if (groupIdRaw) localStorage.setItem('sla_line_group_id', groupIdRaw);
+  if (groupIdRaw) safeSet('sla_line_group_id', groupIdRaw);
 
   const gasInput = document.getElementById('gasWebAppUrl');
-  const gasUrl = (gasInput ? gasInput.value.trim() : '') || localStorage.getItem('sla_gas_url') || state.gasWebAppUrl;
-  if (gasUrl) localStorage.setItem('sla_gas_url', gasUrl);
+  const gasUrl = (gasInput ? gasInput.value.trim() : '') || safeGet('sla_gas_url', state.gasWebAppUrl);
+  if (gasUrl) safeSet('sla_gas_url', gasUrl);
 
   const groupCount = groupIds.length;
   showToast(`กำลังส่งแจ้งเตือนเข้า ${groupCount > 0 ? groupCount + ' กลุ่ม' : 'LINE (Broadcast)'} ...`, 'info');
