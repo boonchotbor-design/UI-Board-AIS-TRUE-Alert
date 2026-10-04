@@ -244,6 +244,48 @@
       background: #0f172a;
     }
 
+        .btn-capture {
+      background: linear-gradient(135deg, #7c3aed, #a855f7);
+      color: white;
+      border: none;
+      padding: 9px 18px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(168, 85, 247, 0.3);
+      transition: all 0.25s ease;
+    }
+
+    .btn-capture:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(168, 85, 247, 0.45);
+    }
+
+    .btn-secondary {
+      background: #1e293b;
+      color: var(--text-primary);
+      border: 1px solid #334155;
+      padding: 9px 16px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .btn-secondary:hover {
+      border-color: #38bdf8;
+      color: #38bdf8;
+      background: #0f172a;
+    }
+
     .overview-banner {
       display: flex;
       justify-content: space-between;
@@ -1114,6 +1156,9 @@ C3ade9979ac5d2b606210a02797b861b3</textarea>
  * interactive Chart.js donut visualizations, and LINE Group Alert notifications.
  */
 
+// LINE Messaging API base URL
+const LINE_API = 'https://api.line.me/v2/bot/message';
+
 // State Management
 const state = {
   operator: 'AIS', // 'AIS' | 'TRUE'
@@ -1936,29 +1981,29 @@ function calculateAndRenderDashboard() {
 
   // Smart QC Executive Summary Table
   document.getElementById('sqcDoneInCount').textContent = m.doneSQC_InSLA;
-  document.getElementById('sqcDoneInAvg').textContent = `${avg(m.totalDays_doneSQC_InSLA, m.doneSQC_InSLA)} วัน`;
+  document.getElementById('sqcDoneInAvg').innerHTML = `<span class="aging-badge">${avg(m.totalDays_doneSQC_InSLA, m.doneSQC_InSLA)} วัน</span>`;
 
   document.getElementById('sqcDoneLateCount').textContent = m.doneSQC_OverSLA;
-  document.getElementById('sqcDoneLateAvg').textContent = `${avg(m.totalDays_doneSQC_OverSLA, m.doneSQC_OverSLA)} วัน`;
+  document.getElementById('sqcDoneLateAvg').innerHTML = `<span class="aging-badge">${avg(m.totalDays_doneSQC_OverSLA, m.doneSQC_OverSLA)} วัน</span>`;
 
   document.getElementById('sqcPendInCount').textContent = m.pendingSQC_InSLA;
-  document.getElementById('sqcPendInAvg').textContent = `${avg(m.totalDays_pendingSQC_InSLA, m.pendingSQC_InSLA)} วัน`;
+  document.getElementById('sqcPendInAvg').innerHTML = `<span class="aging-badge">${avg(m.totalDays_pendingSQC_InSLA, m.pendingSQC_InSLA)} วัน</span>`;
 
   document.getElementById('sqcPendOverCount').textContent = m.pendingSQC_OverSLA;
-  document.getElementById('sqcPendOverAvg').textContent = `${avg(m.totalDays_pendingSQC_OverSLA, m.pendingSQC_OverSLA)} วัน`;
+  document.getElementById('sqcPendOverAvg').innerHTML = `<span class="aging-badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">${avg(m.totalDays_pendingSQC_OverSLA, m.pendingSQC_OverSLA)} วัน</span>`;
 
   // PAT Subcon Executive Summary Table
   document.getElementById('patDoneInCount').textContent = m.donePat_InSLA;
-  document.getElementById('patDoneInAvg').textContent = `${avg(m.totalDays_donePat_InSLA, m.donePat_InSLA)} วัน`;
+  document.getElementById('patDoneInAvg').innerHTML = `<span class="aging-badge">${avg(m.totalDays_donePat_InSLA, m.donePat_InSLA)} วัน</span>`;
 
   document.getElementById('patDoneLateCount').textContent = m.donePat_OverSLA;
-  document.getElementById('patDoneLateAvg').textContent = `${avg(m.totalDays_donePat_OverSLA, m.donePat_OverSLA)} วัน`;
+  document.getElementById('patDoneLateAvg').innerHTML = `<span class="aging-badge">${avg(m.totalDays_donePat_OverSLA, m.donePat_OverSLA)} วัน</span>`;
 
   document.getElementById('patPendInCount').textContent = m.pendingPat_InSLA;
-  document.getElementById('patPendInAvg').textContent = `${avg(m.totalDays_pendingPat_InSLA, m.pendingPat_InSLA)} วัน`;
+  document.getElementById('patPendInAvg').innerHTML = `<span class="aging-badge">${avg(m.totalDays_pendingPat_InSLA, m.pendingPat_InSLA)} วัน</span>`;
 
   document.getElementById('patPendOverCount').textContent = m.pendingPat_OverSLA;
-  document.getElementById('patPendOverAvg').textContent = `${avg(m.totalDays_pendingPat_OverSLA, m.pendingPat_OverSLA)} วัน`;
+  document.getElementById('patPendOverAvg').innerHTML = `<span class="aging-badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">${avg(m.totalDays_pendingPat_OverSLA, m.pendingPat_OverSLA)} วัน</span>`;
 
   // Render Charts
   renderDonutCharts(m);
