@@ -6,7 +6,14 @@
 
 // ── LINE Messaging API: Channel Access Token ของบอท SPE_SLA ──
 var DEFAULT_LINE_TOKEN = 'YKtVKOIprzQoLKqB7foUkyxIwvzGaWxY/lnBmm4GaoJVNVDgbEUOTs8MOZRWBtEfzX8X6k0pX+pJSyave60Ka//baM6waKsQE/Ho43TkMod6YcyLcreDpjVC85MCXv7NxSj47Bh6bI2a2Xuls5hnkAdB04t89/1O/w1cDnyilFU=';
-var DEFAULT_LINE_GROUP_ID = 'C9d136fee255c27308ede4164cad0e27d\nC42aae0c059a87a75d1b8166953108d70\nC3ade9979ac5d2b606210a02797b861b3'; // 3 กลุ่มเริ่มต้น: SPE-SLA, Super Star, TLN_AIS PATDOC
+
+// ── Group IDs แยกรายกลุ่ม ──
+var GROUP_ID_SPE_SLA    = 'C9d136fee255c27308ede4164cad0e27d';  // SPE-SLA-AIS-TRUE
+var GROUP_ID_SUPER_STAR = 'C42aae0c059a87a75d1b8166953108d70';  // Super Star
+var GROUP_ID_TLN_AIS    = 'C3ade9979ac5d2b606210a02797b861b3';  // TLN_AIS PATDOC
+
+// รวมทุกกลุ่ม (AIS + TRUE + Super Star)
+var DEFAULT_LINE_GROUP_ID = GROUP_ID_SPE_SLA + '\n' + GROUP_ID_SUPER_STAR + '\n' + GROUP_ID_TLN_AIS;
 
 // ─────────────────────────────────────────────────────────────
 // doGet: รวมเป็นอันเดียว — serve HTML + action=groupid
@@ -99,6 +106,7 @@ function onOpen() {
       .addSeparator()
       .addItem('📲 ส่งแจ้งเตือน LINE Group (AIS)', 'sendLineAlertAIS')
       .addItem('📲 ส่งแจ้งเตือน LINE Group (TRUE)', 'sendLineAlertTRUE')
+      .addItem('⭐ ส่งแจ้งเตือน LINE Group (Super Star)', 'sendLineAlertSuperStar')
       .addToUi();
 }
 
@@ -1240,7 +1248,8 @@ function sendLineAlertAIS() {
   }
   if (!token) { ui.alert('⚠️ ไม่พบ Token'); return; }
 
-  var groupId = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || DEFAULT_LINE_GROUP_ID;
+  // ส่งเฉพาะกลุ่ม SPE-SLA-AIS-TRUE (ไม่รวม Super Star)
+  var groupId = GROUP_ID_SPE_SLA;
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var dash = ss.getSheetByName('Dashboard สรุปงาน');
@@ -1362,7 +1371,8 @@ function sendLineAlertTRUE() {
   }
   if (!token) { ui.alert('⚠️ ไม่พบ Token'); return; }
 
-  var groupId = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || DEFAULT_LINE_GROUP_ID;
+  // ส่งเฉพาะกลุ่ม SPE-SLA-AIS-TRUE (ไม่รวม Super Star)
+  var groupId = GROUP_ID_SPE_SLA;
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var dash = ss.getSheetByName('Dashboard สรุปงาน TRUE');
@@ -1391,6 +1401,120 @@ function sendLineAlertTRUE() {
   try {
     sendLineAlert(token, msg, null, groupId);
     ui.alert('✅ ส่งสรุปแจ้งเตือนเข้า LINE Group สำเร็จแล้ว!');
+  } catch(e) {
+    ui.alert('⚠️ เกิดข้อผิดพลาดในการส่ง LINE:\n' + e.message);
+  }
+}
+
+/**
+ * เมนูลัด: ส่งแจ้งเตือน LINE สำหรับกลุ่ม Super Star เท่านั้น (AIS Dashboard)
+ */
+function sendLineAlertSuperStar() {
+  var ui = SpreadsheetApp.getUi();
+  var token = PropertiesService.getUserProperties().getProperty('LINE_NOTIFY_TOKEN') || DEFAULT_LINE_TOKEN;
+  if (!token) {
+    var prompt = ui.prompt('⭐ ส่งแจ้งเตือน LINE Group (Super Star)', 'กรุณากรอก LINE Channel Access Token:', ui.ButtonSet.OK_CANCEL);
+    if (prompt.getSelectedButton() !== ui.Button.OK) return;
+    token = prompt.getResponseText().trim();
+  }
+  if (!token) { ui.alert('⚠️ ไม่พบ Token'); return; }
+
+  // ส่งเฉพาะกลุ่ม Super Star
+  var groupId = GROUP_ID_SUPER_STAR;
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var dash = ss.getSheetByName('Dashboard สรุปงาน');
+  if (!dash) { ui.alert('⚠️ ไม่พบชีต Dashboard สรุปงาน กรุณากด Refresh ก่อน'); return; }
+
+  // --- Header ---
+  var selectedYear = dash.getRange('E2').getValue() || new Date().getFullYear();
+  var totalVal     = dash.getRange('I1').getValue();
+  var dateVal      = Utilities.formatDate(new Date(), 'GMT+7', 'dd/MM/yyyy HH:mm');
+
+  // --- Summary: Smart QC ---
+  var sqcInSLA    = dash.getRange('B5').getValue();  var sqcInSLAAvg  = _fmt1_(dash.getRange('C5').getValue());
+  var sqcLate     = dash.getRange('B6').getValue();  var sqcLateAvg   = _fmt1_(dash.getRange('C6').getValue());
+  var sqcPendIn   = dash.getRange('B7').getValue();  var sqcPendInAvg = _fmt1_(dash.getRange('C7').getValue());
+  var sqcPendOver = dash.getRange('B8').getValue();  var sqcPendOvAvg = _fmt1_(dash.getRange('C8').getValue());
+
+  // --- Summary: PAT Subcon ---
+  var patInSLA    = dash.getRange('F5').getValue();  var patInSLAAvg  = _fmt1_(dash.getRange('G5').getValue());
+  var patLate     = dash.getRange('F6').getValue();  var patLateAvg   = _fmt1_(dash.getRange('G6').getValue());
+  var patPendIn   = dash.getRange('F7').getValue();  var patPendInAvg = _fmt1_(dash.getRange('G7').getValue());
+  var patPendOver = dash.getRange('F8').getValue();
+
+  // --- Pending Lists ---
+  var DATA_START = 32;
+  var lastRow = dash.getLastRow();
+  var sqcList = [], patList = [], rwList = [];
+  if (lastRow >= DATA_START) {
+    var allData = dash.getRange(DATA_START, 1, lastRow - DATA_START + 1, 11).getValues();
+    for (var r = 0; r < allData.length; r++) {
+      var row = allData[r];
+      if (row[0] && String(row[0]).trim() !== '')
+        sqcList.push({ duid: String(row[0]).trim(), aging: String(row[1]).trim() });
+      if (row[4] && String(row[4]).trim() !== '')
+        patList.push({ duid: String(row[4]).trim(), aging: String(row[5]).trim(), owner: String(row[6] || '').trim() });
+      if (row[8] && String(row[8]).trim() !== '')
+        rwList.push({ duid: String(row[8]).trim(), aging: String(row[9]).trim(), owner: String(row[10] || '').trim() });
+    }
+  }
+
+  // --- สร้างข้อความ ---
+  var nl = '\n';
+  var msg = '⭐ [AIS INSTALLATION & SLA DASHBOARD]' + nl +
+            '📅 ประจำวันที่: ' + dateVal + nl +
+            '🎯 งานติดตั้งเสร็จ (' + selectedYear + '): ' + totalVal + ' ไซต์' + nl +
+            '------------------------------------' + nl +
+            '🔹 EXECUTIVE SUMMARY: SMART QC' + nl +
+            '🟢 ปิดตามกำหนด (In SLA): '      + sqcInSLA    + ' ไซต์ (เฉลี่ย ' + sqcInSLAAvg  + ' วัน)' + nl +
+            '🟡 ปิดงานล่าช้า (Done Late): '   + sqcLate     + ' ไซต์ (เฉลี่ย ' + sqcLateAvg   + ' วัน)' + nl +
+            '🔵 รอตรวจสอบ (In SLA): '         + sqcPendIn   + ' ไซต์ (เฉลี่ย ' + sqcPendInAvg + ' วัน)' + nl +
+            '🔴 ค้างวิกฤต (Over SLA): '        + sqcPendOver + ' ไซต์ (เฉลี่ย ' + sqcPendOvAvg + ' วัน)' + nl + nl +
+            '🔹 EXECUTIVE SUMMARY: PAT SUBCON' + nl +
+            '🟢 ส่งตามกำหนด (In SLA): '       + patInSLA    + ' ไซต์ (เฉลี่ย ' + patInSLAAvg  + ' วัน)' + nl +
+            '🟡 ส่งงานล่าช้า (Done Late): '   + patLate     + ' ไซต์ (เฉลี่ย ' + patLateAvg   + ' วัน)' + nl +
+            '🔵 รอส่งงาน (In SLA): '          + patPendIn   + ' ไซต์ (เฉลี่ย ' + patPendInAvg + ' วัน)' + nl +
+            '🔴 ค้างวิกฤต (Over SLA): '        + patPendOver + ' ไซต์' + nl +
+            '------------------------------------' + nl +
+            '⚠️ รายการที่ต้องดำเนินการเร่งด่วน:';
+
+  // 📌 Smart QC ค้าง
+  msg += nl + nl + '📌 Smart QC ค้าง (' + sqcList.length + ' ไซต์):';
+  if (sqcList.length === 0) {
+    msg += nl + '  ✅ ไม่มีรายการค้าง';
+  } else {
+    for (var i = 0; i < sqcList.length; i++)
+      msg += nl + '  ' + (i + 1) + '. ' + sqcList[i].duid + ' (' + sqcList[i].aging + ') - -';
+  }
+
+  // 📌 PAT Subcon ค้าง
+  msg += nl + nl + '📌 PAT Subcon ค้าง (' + patList.length + ' ไซต์):';
+  if (patList.length === 0) {
+    msg += nl + '  ✅ ไม่มีรายการค้าง';
+  } else {
+    for (var i = 0; i < patList.length; i++) {
+      var own = (patList[i].owner && patList[i].owner !== '' && patList[i].owner !== '-')
+                ? 'Assign: ' + patList[i].owner : '-';
+      msg += nl + '  ' + (i + 1) + '. ' + patList[i].duid + ' (' + patList[i].aging + ') - ' + own;
+    }
+  }
+
+  // 🚨 Rework Required
+  msg += nl + nl + '🚨 Rework Required: PAT Not Pass (' + rwList.length + ' ไซต์):';
+  if (rwList.length === 0) {
+    msg += nl + '  ✅ ไม่มีรายการแก้ไข';
+  } else {
+    for (var i = 0; i < rwList.length; i++) {
+      var own = (rwList[i].owner && rwList[i].owner !== '' && rwList[i].owner !== '-')
+                ? 'Assign: ' + rwList[i].owner : '-';
+      msg += nl + '  ' + (i + 1) + '. ' + rwList[i].duid + ' (' + rwList[i].aging + ') - ' + own;
+    }
+  }
+
+  try {
+    sendLineAlert(token, msg, null, groupId);
+    ui.alert('✅ ส่งสรุปแจ้งเตือนเข้า LINE Group Super Star สำเร็จแล้ว!');
   } catch(e) {
     ui.alert('⚠️ เกิดข้อผิดพลาดในการส่ง LINE:\n' + e.message);
   }
