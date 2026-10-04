@@ -104,9 +104,9 @@ function onOpen() {
       .addItem('🔄 อัปเดตข้อมูลล่าสุด AIS (Refresh)', 'createAisDashboard')
       .addItem('🔄 อัปเดตข้อมูลล่าสุด TRUE (Refresh)', 'createTrueDashboard')
       .addSeparator()
-      .addItem('📲 ส่งแจ้งเตือน LINE Group (AIS)', 'sendLineAlertAIS')
+      .addItem('📲 ส่งแจ้งเตือน LINE Group (AIS) - ทุกกลุ่ม', 'sendLineAlertAIS')
+      .addItem('⭐ ส่งแจ้งเตือน LINE Group (Super Star เท่านั้น)', 'sendLineAlertSuperStar')
       .addItem('📲 ส่งแจ้งเตือน LINE Group (TRUE)', 'sendLineAlertTRUE')
-      .addItem('⭐ ส่งแจ้งเตือน LINE Group (Super Star)', 'sendLineAlertSuperStar')
       .addToUi();
 }
 
@@ -1067,7 +1067,13 @@ function uploadImageToDrive_(base64Data) {
  * ส่งแจ้งเตือนเข้า LINE ผ่าน LINE Notify Token หรือ LINE Messaging API (บอท SPE_SLA)
  */
 function sendLineAlert(token, message, imageBase64, groupId) {
+  // ค่าเริ่มต้นถ้าเรียกฟังก์ชันตรงๆ จาก Apps Script Editor
+  token = token || PropertiesService.getUserProperties().getProperty('LINE_NOTIFY_TOKEN') || DEFAULT_LINE_TOKEN;
   if (!token) throw new Error('กรุณาระบุ LINE Token หรือ Webhook URL');
+  
+  if (!message) {
+    message = '🔔 ทดสอบการแจ้งเตือนจากระบบ SLA Dashboard (' + Utilities.formatDate(new Date(), 'GMT+7', 'dd/MM/yyyy HH:mm:ss') + ')';
+  }
   
   // บันทึก Token ล่าสุดไว้ใน User Properties
   try {
@@ -1076,7 +1082,7 @@ function sendLineAlert(token, message, imageBase64, groupId) {
   } catch(e) {}
 
   if (!groupId) {
-    groupId = PropertiesService.getScriptProperties().getProperty('SAVED_LINE_GROUP_ID') || '';
+    groupId = GROUP_ID_SPE_SLA + '\n' + GROUP_ID_SUPER_STAR;
   }
 
   if (token.indexOf('http://') === 0 || token.indexOf('https://') === 0) {
@@ -1248,8 +1254,8 @@ function sendLineAlertAIS() {
   }
   if (!token) { ui.alert('⚠️ ไม่พบ Token'); return; }
 
-  // ส่งเฉพาะกลุ่ม SPE-SLA-AIS-TRUE (ไม่รวม Super Star)
-  var groupId = GROUP_ID_SPE_SLA;
+  // ส่งไปยังทั้งกลุ่ม SPE-SLA-AIS-TRUE และ Super Star
+  var groupId = GROUP_ID_SPE_SLA + '\n' + GROUP_ID_SUPER_STAR;
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var dash = ss.getSheetByName('Dashboard สรุปงาน');
