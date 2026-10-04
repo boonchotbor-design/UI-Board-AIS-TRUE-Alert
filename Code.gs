@@ -744,6 +744,39 @@ function doGet(e) {
 }
 
 /**
+ * ดึงข้อมูลสดจาก Active Spreadsheet สำหรับส่งให้ Dashboard (Index.html) โดยตรง
+ * รองรับทั้งชีต AIS/56A0S0Q และ True/56A0UPS รวดเร็วและแม่นยำ 100% ไม่ต้องผ่าน JSONP
+ */
+function getSheetDataForDashboard() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) {
+      return { success: false, message: 'ไม่พบ Active Spreadsheet' };
+    }
+    
+    function readSheetTable(primary, fallback) {
+      var s = ss.getSheetByName(primary) || ss.getSheetByName(fallback);
+      if (!s) return [];
+      var lastRow = s.getLastRow();
+      var lastCol = s.getLastColumn();
+      if (lastRow < 1 || lastCol < 1) return [];
+      var rCount = Math.min(lastRow, 4000);
+      var cCount = Math.min(lastCol, 120);
+      return s.getRange(1, 1, rCount, cCount).getDisplayValues();
+    }
+
+    return {
+      success: true,
+      AIS: readSheetTable('AIS', '56A0S0Q'),
+      TRUE: readSheetTable('True', '56A0UPS'),
+      title: ss.getName()
+    };
+  } catch(e) {
+    return { success: false, message: e.message };
+  }
+}
+
+/**
  * เปิด Modal Dialog ขนาดใหญ่ใน Google Sheets
  */
 function showDashboardModal() {
@@ -773,13 +806,26 @@ function saveImportData(operator, records) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheetName = (operator === 'AIS') ? 'AIS' : 'True';
   var sheet = ss.getSheetByName(sheetName) || ss.getSheetByName(operator === 'AIS' ? '56A0S0Q' : '56A0UPS');
-  if (!sheet) return { success: false, message: 'ไม่พบชีต: ' + sheetName };
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
   var activeSheetName = sheet.getName();
   var isNewFormat = (activeSheetName === '56A0S0Q' || activeSheetName === '56A0UPS');
 
   var lastRow = sheet.getLastRow();
-  var lastCol = Math.max(sheet.getLastColumn(), isNewFormat ? (operator === 'AIS' ? 45 : 70) : 40);
-  if (lastRow < 2) return { success: false, message: 'ชีตว่างเปล่า ไม่มีข้อมูลเดิม' };
+  var reqCols = isNewFormat ? (operator === 'AIS' ? 45 : 70) : 40;
+  if (sheet.getMaxColumns() < reqCols) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), reqCols - sheet.getMaxColumns());
+  }
+  var lastCol = Math.max(sheet.getLastColumn(), reqCols);
+  if (lastRow < 2) {
+    var headers = isNewFormat 
+      ? (operator === 'AIS' ? ['DU ID','','','','','','','','Installation-Completed Actual End Date','','','','','','','','','','','','Smart QC Actual End Date','','','','','','','','','','PAT Subcon submit Actual End Date','PAT Owner','','','','','','','PAT Remarks','Sub PAT Pass Status'] : ['DU ID','','','','','','','','','','','','','','','','','','','','','','Verify Photo Actual End Date','AOR Actual End Date','08.1 SmartQC Actual End Date','','Integration alarm category','','14.1 A129 PAT Site Folder','PAT Owner']) 
+      : ['DU ID'];
+    while (headers.length < lastCol) headers.push('');
+    sheet.getRange(1, 1, 1, lastCol).setValues([headers]);
+    lastRow = 1;
+  }
 
   var range = sheet.getRange(1, 1, lastRow, lastCol);
   var data = range.getValues();
@@ -848,6 +894,9 @@ function saveImportData(operator, records) {
 
     // หากมีแถวใหม่ที่เพิ่มเข้ามา เขียนต่อท้ายใน 1 คำสั่ง
     if (appendRows.length > 0) {
+      if (sheet.getMaxRows() < lastRow + appendRows.length) {
+        sheet.insertRowsAfter(sheet.getMaxRows(), (lastRow + appendRows.length) - sheet.getMaxRows());
+      }
       sheet.getRange(lastRow + 1, 1, appendRows.length, lastCol).setValues(appendRows);
     }
 
@@ -913,6 +962,9 @@ function saveImportData(operator, records) {
     range.setValues(data);
 
     if (appendRows.length > 0) {
+      if (sheet.getMaxRows() < lastRow + appendRows.length) {
+        sheet.insertRowsAfter(sheet.getMaxRows(), (lastRow + appendRows.length) - sheet.getMaxRows());
+      }
       sheet.getRange(lastRow + 1, 1, appendRows.length, lastCol).setValues(appendRows);
     }
 
@@ -923,13 +975,21 @@ function saveImportData(operator, records) {
 }
 
 /**
+ * บันทึกข้อมูลที่ Import ทีละ batch (ปลอดภัย ไม่ติด limit ขนาด payload)
+ */
+function saveImportDataChunk(operator, chunk, isFirst, isLast) {
+  var res = saveImportData(operator, chunk);
+  return res;
+}
+
+/**
  * นำเข้าทั้งตาราง 2D Array จากไฟล์ Excel วางลงในชีตเป้าหมายโดยตรงใน 1 วินาที
  */
 function importFullSheet(sheetTarget, full2dTable) {
   if (!full2dTable || full2dTable.length === 0) return { success: false, message: 'ไม่มีข้อมูล' };
   
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(sheetTarget);
+  var sheet = ss.getSheetByName(sheetTarget) || ss.getSheetByName(sheetTarget === 'AIS' ? '56A0S0Q' : (sheetTarget === 'True' ? '56A0UPS' : sheetTarget));
   if (!sheet) {
     sheet = ss.insertSheet(sheetTarget);
   }
@@ -946,18 +1006,27 @@ function importFullSheet(sheetTarget, full2dTable) {
     return r;
   });
 
+  // ขยาย rows / cols ถ้าชีตมีขนาดไม่พอ เพื่อป้องกัน Range coordinates invalid
+  if (sheet.getMaxRows() < padded.length) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), padded.length - sheet.getMaxRows());
+  }
+  if (sheet.getMaxColumns() < maxCols) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), maxCols - sheet.getMaxColumns());
+  }
+
   // เคลียร์และเขียนทับทั้งหมดใน 1 คำสั่ง
   sheet.clearContents();
   sheet.getRange(1, 1, padded.length, maxCols).setValues(padded);
 
   // คำนวณแดชบอร์ดตามค่าย
-  if (sheetTarget === '56A0S0Q' || sheetTarget === 'AIS') {
+  var sName = sheet.getName();
+  if (sName === '56A0S0Q' || sName === 'AIS') {
     createAisDashboard();
-  } else if (sheetTarget === '56A0UPS' || sheetTarget === 'True') {
+  } else if (sName === '56A0UPS' || sName === 'True') {
     createTrueDashboard();
   }
 
-  return { success: true, count: padded.length, message: 'นำเข้าตาราง ' + sheetTarget + ' ทั้งหมดสำเร็จเรียบร้อยแล้ว' };
+  return { success: true, count: padded.length, message: 'นำเข้าตาราง ' + sName + ' ทั้งหมดสำเร็จเรียบร้อยแล้ว' };
 }
 
 /**
@@ -1064,6 +1133,12 @@ function sendLineAlert(token, message, imageBase64, groupId) {
       };
       var res = UrlFetchApp.fetch(broadcastUrl, options);
       var resCode = res.getResponseCode();
+      if (resCode !== 200 && msgs.length > 1) {
+        // ลองส่งเฉพาะข้อความ (text-only)
+        options.payload = JSON.stringify({ messages: [{ type: 'text', text: message }] });
+        res = UrlFetchApp.fetch(broadcastUrl, options);
+        resCode = res.getResponseCode();
+      }
       if (resCode !== 200) {
         throw new Error('LINE Broadcast Error (' + resCode + '): ' + res.getContentText());
       }
@@ -1086,6 +1161,14 @@ function sendLineAlert(token, message, imageBase64, groupId) {
         };
         var pushRes = UrlFetchApp.fetch(pushUrl, pushOptions);
         var pushCode = pushRes.getResponseCode();
+        
+        // ถ้า fail เพราะรูปภาพ (เช่น status 400), ให้ retry ด้วย text-only ทันที!
+        if (pushCode !== 200 && msgs.length > 1) {
+          pushOptions.payload = JSON.stringify({ to: gid, messages: [{ type: 'text', text: message }] });
+          pushRes = UrlFetchApp.fetch(pushUrl, pushOptions);
+          pushCode = pushRes.getResponseCode();
+        }
+
         if (pushCode !== 200) {
           errors.push(gid + ': ' + pushCode + ' ' + pushRes.getContentText());
         } else {

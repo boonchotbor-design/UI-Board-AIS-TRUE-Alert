@@ -4,6 +4,9 @@
  * interactive Chart.js donut visualizations, and LINE Group Alert notifications.
  */
 
+// LINE Messaging API base URL
+const LINE_API = 'https://api.line.me/v2/bot/message';
+
 // State Management
 const state = {
   operator: 'AIS', // 'AIS' | 'TRUE'
@@ -357,8 +360,37 @@ function detectTrueColumns(rows) {
 }
 
 // Fetch live data from Google Sheet
-// ดึงจากชีต AIS และ True โดยตรงเท่านั้น
+// ดึงจากชีต AIS และ True โดยตรง
 async function loadDataFromGoogleSheet() {
+  // 1. ถ้าทำงานในบริบทของ Google Apps Script (Modal หรือ Sidebar ใน Google Sheets)
+  if (typeof google !== 'undefined' && google.script && google.script.run) {
+    showToast('กำลังโหลดข้อมูลสดจาก Google Sheet...', 'info');
+    google.script.run
+      .withSuccessHandler((res) => {
+        if (res && res.success) {
+          state.rawGoogleSheetData.AIS  = res.AIS  || [];
+          state.rawGoogleSheetData.TRUE = res.TRUE || [];
+          state.lastUpdated = new Date();
+
+          const el = document.getElementById('updateTimestamp');
+          if (el) el.textContent = `ข้อมูลอัปเดต ณ: ${formatDateTime(state.lastUpdated)} (Google Sheets: ${res.title || ''})`;
+
+          extractAvailableYears();
+          calculateAndRenderDashboard();
+          showToast('โหลดข้อมูลสดจาก Google Sheets สำเร็จเรียบร้อย!', 'success');
+        } else {
+          showToast('ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: ' + (res ? res.message : 'Unknown error'), 'error');
+        }
+      })
+      .withFailureHandler((err) => {
+        console.error('GAS getSheetDataForDashboard error:', err);
+        showToast('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + err.message, 'error');
+      })
+      .getSheetDataForDashboard();
+    return;
+  }
+
+  // 2. ถ้าทำงานใน Browser อิสระ ดึงผ่าน JSONP
   try {
     const [dataAis, dataTrue] = await Promise.all([
       fetchSheetViaJsonp('AIS'),
@@ -826,29 +858,29 @@ function calculateAndRenderDashboard() {
 
   // Smart QC Executive Summary Table
   document.getElementById('sqcDoneInCount').textContent = m.doneSQC_InSLA;
-  document.getElementById('sqcDoneInAvg').textContent = `${avg(m.totalDays_doneSQC_InSLA, m.doneSQC_InSLA)} วัน`;
+  document.getElementById('sqcDoneInAvg').innerHTML = `<span class="aging-badge">${avg(m.totalDays_doneSQC_InSLA, m.doneSQC_InSLA)} วัน</span>`;
 
   document.getElementById('sqcDoneLateCount').textContent = m.doneSQC_OverSLA;
-  document.getElementById('sqcDoneLateAvg').textContent = `${avg(m.totalDays_doneSQC_OverSLA, m.doneSQC_OverSLA)} วัน`;
+  document.getElementById('sqcDoneLateAvg').innerHTML = `<span class="aging-badge">${avg(m.totalDays_doneSQC_OverSLA, m.doneSQC_OverSLA)} วัน</span>`;
 
   document.getElementById('sqcPendInCount').textContent = m.pendingSQC_InSLA;
-  document.getElementById('sqcPendInAvg').textContent = `${avg(m.totalDays_pendingSQC_InSLA, m.pendingSQC_InSLA)} วัน`;
+  document.getElementById('sqcPendInAvg').innerHTML = `<span class="aging-badge">${avg(m.totalDays_pendingSQC_InSLA, m.pendingSQC_InSLA)} วัน</span>`;
 
   document.getElementById('sqcPendOverCount').textContent = m.pendingSQC_OverSLA;
-  document.getElementById('sqcPendOverAvg').textContent = `${avg(m.totalDays_pendingSQC_OverSLA, m.pendingSQC_OverSLA)} วัน`;
+  document.getElementById('sqcPendOverAvg').innerHTML = `<span class="aging-badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">${avg(m.totalDays_pendingSQC_OverSLA, m.pendingSQC_OverSLA)} วัน</span>`;
 
   // PAT Subcon Executive Summary Table
   document.getElementById('patDoneInCount').textContent = m.donePat_InSLA;
-  document.getElementById('patDoneInAvg').textContent = `${avg(m.totalDays_donePat_InSLA, m.donePat_InSLA)} วัน`;
+  document.getElementById('patDoneInAvg').innerHTML = `<span class="aging-badge">${avg(m.totalDays_donePat_InSLA, m.donePat_InSLA)} วัน</span>`;
 
   document.getElementById('patDoneLateCount').textContent = m.donePat_OverSLA;
-  document.getElementById('patDoneLateAvg').textContent = `${avg(m.totalDays_donePat_OverSLA, m.donePat_OverSLA)} วัน`;
+  document.getElementById('patDoneLateAvg').innerHTML = `<span class="aging-badge">${avg(m.totalDays_donePat_OverSLA, m.donePat_OverSLA)} วัน</span>`;
 
   document.getElementById('patPendInCount').textContent = m.pendingPat_InSLA;
-  document.getElementById('patPendInAvg').textContent = `${avg(m.totalDays_pendingPat_InSLA, m.pendingPat_InSLA)} วัน`;
+  document.getElementById('patPendInAvg').innerHTML = `<span class="aging-badge">${avg(m.totalDays_pendingPat_InSLA, m.pendingPat_InSLA)} วัน</span>`;
 
   document.getElementById('patPendOverCount').textContent = m.pendingPat_OverSLA;
-  document.getElementById('patPendOverAvg').textContent = `${avg(m.totalDays_pendingPat_OverSLA, m.pendingPat_OverSLA)} วัน`;
+  document.getElementById('patPendOverAvg').innerHTML = `<span class="aging-badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">${avg(m.totalDays_pendingPat_OverSLA, m.pendingPat_OverSLA)} วัน</span>`;
 
   // Render Charts
   renderDonutCharts(m);
@@ -1060,21 +1092,34 @@ function handleExcelFileUpload(file) {
       document.getElementById('uploadModal').classList.remove('active');
       showToast(`นำเข้าสำเร็จ! พบ ${parsedRecords.length} ไซต์ใน ${detectedOp}`, 'success');
 
-      // If in Google Apps Script context, ask or push to Google Sheet
+      // If in Google Apps Script context, save parsed records to Google Sheet in safe batches
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         const targetSheet = detectedOp === 'AIS' ? 'AIS' : 'True';
-        showToast(`กำลังนำเข้าข้อมูลลงชีต ${targetSheet}...`, 'info');
-        google.script.run
-          .withSuccessHandler((res) => {
-            showToast(`✅ อัปเดตข้อมูลลงชีต ${targetSheet} ใน Google Spreadsheet สำเร็จแล้ว!`, 'success');
-          })
-          .withFailureHandler((err) => {
-            console.warn('importFullSheet failed, trying saveImportData fallback:', err);
-            google.script.run
-              .withSuccessHandler(() => showToast('อัปเดตข้อมูลลง Google Spreadsheet สำเร็จแล้ว!', 'success'))
-              .saveImportData(detectedOp, parsedRecords);
-          })
-          .importFullSheet(targetSheet, jsonRows);
+        showToast(`กำลังซิงค์ข้อมูล ${parsedRecords.length} แถวลงชีต ${targetSheet}...`, 'info');
+        
+        const BATCH_SIZE = 250;
+        let batchIdx = 0;
+        function sendNextBatch() {
+          if (batchIdx >= parsedRecords.length) {
+            showToast(`✅ อัปเดตข้อมูล ${parsedRecords.length} ไซต์ลงชีต ${targetSheet} สำเร็จเรียบร้อย!`, 'success');
+            return;
+          }
+          const chunk = parsedRecords.slice(batchIdx, batchIdx + BATCH_SIZE);
+          const isFirst = (batchIdx === 0);
+          batchIdx += BATCH_SIZE;
+          const isLast = (batchIdx >= parsedRecords.length);
+          
+          google.script.run
+            .withSuccessHandler(() => {
+              sendNextBatch();
+            })
+            .withFailureHandler((err) => {
+              console.warn('Batch sync error:', err);
+              showToast(`⚠️ ซิงค์ข้อมูลลงชีต ${targetSheet} บางส่วน: ${err.message}`, 'warning');
+            })
+            .saveImportDataChunk(detectedOp, chunk, isFirst, isLast);
+        }
+        sendNextBatch();
       } else if (state.gasWebAppUrl) {
         showToast('กำลังซิงค์ข้อมูลกับ Google Spreadsheet...', 'info');
         fetch(state.gasWebAppUrl, {
@@ -1381,12 +1426,18 @@ async function handleSendLineAlert() {
       .withSuccessHandler((res) => {
         const sentCount = (res && res.sent) ? res.sent : groupCount;
         showToast(`🚀 ส่งแจ้งเตือนสำเร็จ ${sentCount} กลุ่ม!` + (res && res.failed > 0 ? ` (ล้มเหลว ${res.failed} กลุ่ม)` : ''), 'success');
+        if (state.lastCapturedBlob) {
+          try {
+            navigator.clipboard.write([new ClipboardItem({ 'image/png': state.lastCapturedBlob })]);
+            showToast('📋 คัดลอกรูปภาพแดชบอร์ดลง Clipboard แล้ว สามารถกด Ctrl+V วางใน LINE ได้เลย!', 'info');
+          } catch(e) {}
+        }
         document.getElementById('lineModal').classList.remove('active');
       })
       .withFailureHandler((err) => {
         showToast(`❌ ส่ง LINE ล้มเหลว: ${err.message}`, 'error');
       })
-      .sendLineAlert(token, message, imageBase64, groupId);
+      .sendLineAlert(token, message, null, groupId);
     return;
   }
 
